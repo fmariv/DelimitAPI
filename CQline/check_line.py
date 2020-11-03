@@ -3,12 +3,14 @@
 # ----------------------------------------------------------
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Cesc Masdeu & Fran Martin
-# Version: 3.1
-# Date: 20201026
-# Version ArcGIS: 10.1
-# Version Python: 2.7.2
+# Version: 0.1
+# Date: 20201103
+# Version Python: 3.7
 # ----------------------------------------------------------
 
+# TODO translate functions doc strings to english
+# TODO create class attribute for layers into geopackage
+# TODO comprovar amb capes que tinguin errors
 
 """
 Quality check and control of a line ready to upload to the database
@@ -54,24 +56,20 @@ class CheckQualityLine(View):
         self.del_temp()
 
         # Copy layers and tables from line folder to work local geopackage
-        self.copy_line_2_cqline()
+        self.copy_data_2_gpkg()
+
+        # Check if the line ID already exists into the database
+        self.check_line_id_exists()
+
+        # Check if the line's field structure and content is correct
+        self.check_lin_tram_ppta_layer()
+
+        # TODO
+        # Crear llista amb les fites que son Proposta Final
+        self.get_ppf_list()
+        # self.llista_punts_ppta = self.ppf.totes(PUNT_PROPOSTA)
 
         '''
-        # Comprovar si l'IDLINIA existeix a FitaG i Lin_Tram_Proposta
-        self.check_id_linia(self.id_linia_num)
-
-        # Crear llista amb les fites que son Proposta Final
-        self.llista_punts_ppta = self.ppf.totes(PUNT_PROPOSTA)
-
-        # Comprovar l'estructura i contingut de la carpeta
-        self.check_directory()
-
-        # Comprovar que l'estructura de camps de Lin_Tram_Ppta és correcte
-        self.check_fields_structure()
-
-        # Comprovar que els camps de Lin_Tram_Ppta estan correctament emplenats
-        self.check_fields_fill()
-
         # Donar informació sobre els vertex de les linies
         self.info_vertex_linia()
 
@@ -206,7 +204,7 @@ class CheckQualityLine(View):
 
         return entities_exist
 
-    def copy_line_2_cqline(self):
+    def copy_data_2_gpkg(self):
         """Copy all the feature classes and tables from the line's folder to the local work geopackage"""
         entities_exist = self.check_entities_exist()
 
@@ -260,7 +258,7 @@ class CheckQualityLine(View):
         arr
         return arr
 
-    def check_id_linia(self, id_linia):
+    def check_line_id_exists(self):
         """
         Funció per a comprovar si l'IdLinia existeix a FitaG i Lin_Tram_Proposta
         :param id_linia -> ID de la línia de la qual es vol comprovar si existeix a FitaG i Lin_Tram_Proposta
@@ -268,65 +266,90 @@ class CheckQualityLine(View):
         msg = ("L'IdLinia introduït no està repetit en SIDM2", "L'IdLinia introduït està en FitaG i Lin_Tram_Proposta",
                "L'IdLinia introduït està FitaG pero no en Lin_Tram_Proposta",
                "L'IdLinia introduït no està FitaG pero si en Lin_Tram_Proposta")
-        # Crear arrays amb el total de IdLinia que hi ha a FitaG i LinTramProposta
-        llista_linia_lin_tram = []
-        llista_linia_fita_g = []
 
-        with arcpy.da.SearchCursor(LIN_TRAM_PROPOSTA, "ID_Linia") as cursor:
-            for row in cursor:
-                llista_linia_lin_tram.append(row[0])
+        line_id_in_lin_tram = False
+        line_id_in_fita_g = False
 
-        with arcpy.da.SearchCursor(FITA_G, "ID_LINIA") as cursor:
-            for row in cursor:
-                llista_linia_fita_g.append(row[0])
+        # Check into LIN_TRAM_PROPOSTA_SIDM2
+        lin_tram_ppta_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Lin_Tram_Proposta_SIDM2')
+        tram_duplicated_id = lin_tram_ppta_sidm2_gdf['ID_LINIA'] == self.line_id
+        tram_line_id = lin_tram_ppta_sidm2_gdf[tram_duplicated_id]
+        if tram_line_id.shape[0] > 0:
+            line_id_in_lin_tram = True
 
-        # Comprovar si IdLinia està en Fita_G i LinTramProposta
-        if id_linia in llista_linia_fita_g and id_linia in llista_linia_lin_tram:
-            self.write_report(msg[1], "error")
-        elif id_linia in llista_linia_fita_g and id_linia not in llista_linia_lin_tram:
-            self.write_report(msg[2], "error")
-        elif id_linia not in llista_linia_fita_g and id_linia in llista_linia_lin_tram:
-            self.write_report(msg[3], "error")
-        elif id_linia not in llista_linia_fita_g and id_linia not in llista_linia_lin_tram:
-            self.write_report(msg[0], "ok")
+        # Check into FITA_G_SIDM2
+        fita_g_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Fita_G_SIDM2')
+        fita_g_duplicated_id = fita_g_sidm2_gdf['ID_LINIA'] == self.line_id
+        fita_g_line_id = fita_g_sidm2_gdf[fita_g_duplicated_id]
+        if fita_g_line_id.shape[0] > 0:
+            line_id_in_fita_g = True
 
-    def check_fields_structure(self):
+        if line_id_in_fita_g and line_id_in_lin_tram:
+            self.logger.error("L'ID Linia introduït està en FitaG i Lin_Tram_Proposta")
+        elif line_id_in_fita_g and not line_id_in_lin_tram:
+            self.logger.error("L'ID Linia introduït està en FitaG però no en Lin_Tram_Proposta")
+        elif not line_id_in_fita_g and line_id_in_lin_tram:
+            self.logger.error("L'ID Linia introduït no està en FitaG però sí en Lin_Tram_Proposta")
+        elif not line_id_in_fita_g and not line_id_in_lin_tram:
+            self.logger.info("L'ID Linia no està repetit a SIDM2")
+
+    def check_lin_tram_ppta_layer(self):
+        """
+
+        :return:
+        """
+        self.check_fields_lin_tram_ppta()
+        self.check_fields_content_lint_tram_ppta()
+
+    def check_fields_lin_tram_ppta(self):
         """Comprovar que l'estructura de camps de la capa Lin_TramPpta és correcte"""
-        true_fields = ('Shape', 'ID_LINIA', 'ID', 'DATA', 'COMENTARI', 'P1', 'P2', 'P3', 'P4', 'PF',
-                       'ID_FITA1', 'ID_FITA2')
-        msg = ("L'estructura de camps de Lin_TramPpta es correcte",
-               "L'estructura de camps de Lin_TramPpta no es correcte")
 
+        # Fields that the line's layer must have
+        true_fields = ('OBJECTID', 'ID_LINIA', 'ID', 'DATA', 'COMENTARI', 'P1', 'P2', 'P3', 'P4', 'PF',
+                       'ID_FITA1', 'ID_FITA2', 'geometry')
+
+        # Get line's layer's fields
+        lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
+        lin_tram_fields = list(lin_tram_ppta_line_gdf.columns)
+
+        # Compare
         field_match = 0
-        fields = arcpy.ListFields(LIN_TRAM_PPTA)
-        for field in fields:
-            if field.name in true_fields:
+        for field in lin_tram_fields:
+            if field in true_fields:
                 field_match += 1
 
         if field_match == len(true_fields):
-            self.write_report(msg[0], 'ok')
+            self.logger.info("L'estructura de camps de Lin_TramPpta és correcte")
         else:
-            self.write_report(msg[1], 'error')
+            self.logger.error("L'estructura de camps de Lin_TramPpta NO és correcte")
 
-    def check_fields_fill(self):
+    def check_fields_content_lint_tram_ppta(self):
         """Comprovar si la capa Lin_TramPpta té els camps correctament emplenats"""
-        error = False
-        msg = ('Camps de Lin_TramPpta emplenats correctament',
-               'Algun dels camps ID_FITA de Lin_Tram_Ppta no estan correctament emplenats')
+        lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
 
-        # Comprovar camp ID_LINIA
-        with arcpy.da.SearchCursor(LIN_TRAM_PPTA, ['ID_LINIA', 'ID_FITA1', 'ID_FITA2']) as cur:
-            for id_linia, id_fita1, id_fita2 in cur:
-                if id_linia != self.id_linia_num:
-                    error = True
-                    self.write_report('El camp ID_LINIA de Lin_Tram_Ppta es incorrecte i te com a valor "{}"'.format(
-                        id_linia), 'error')
-                if len(id_fita1) == 1 or len(id_fita2) == 1:
-                    if not error:
-                        error = True
-                    self.write_report(msg[1], 'error')
-        if not error:
-            self.write_report(msg[0], 'ok')
+        # Check that doesn't exist the line ID from another line
+        line_id_error = False
+        not_line_id = lin_tram_ppta_line_gdf['ID_LINIA'] != self.line_id
+        tram_not_line_id = lin_tram_ppta_line_gdf[not_line_id]
+        if tram_not_line_id.shape[0] > 1 and not line_id_error:
+            line_id_error = True
+            self.logger.error("Existeixen trams de línia amb l'ID_LINIA d'una altra línia")
+
+        # Check that the fita ID is correct
+        # F1
+        id_fita_error = False
+        id_f1_bad = lin_tram_ppta_line_gdf['ID_FITA1'] == 1
+        tram_id_f1_bad = lin_tram_ppta_line_gdf[id_f1_bad]
+        # F2
+        id_f2_bad = lin_tram_ppta_line_gdf['ID_FITA2'] == 1
+        tram_id_f2_bad = lin_tram_ppta_line_gdf[id_f2_bad]
+
+        if (tram_id_f1_bad.shape[0] > 1 or tram_id_f2_bad.shape[0] > 1) and not id_fita_error:
+            id_fita_error = True
+            self.logger.error("El camp ID_FITA d'algun dels trams de la línia no és vàlid")
+
+        if not line_id_error and not id_fita_error:
+            self.logger.info("Els camps de Lin_TramPpta estan correctament emplenats")
 
     def check_fites_trobades(self):
         """
@@ -341,6 +364,19 @@ class CheckQualityLine(View):
         self.check_name_fotos()
         # Comprovar que si la fita té cota sigui fita trobada
         self.check_cota_fita()
+
+    @staticmethod
+    def get_ppf_list(self):
+        """
+
+        :return:
+        """
+        p_proposta_gdf = gpd.read_file(WORK_GPKG, layer='P_Proposta')
+        is_ppf = p_proposta_gdf['PFF'] == 1
+        ppf = p_proposta_gdf[is_ppf]
+        ppf_list = ppf['ID_PUNT'].to_list()
+
+        return ppf_list
 
     def check_foto_exists(self):
         """Funció per a comprovar que una fita trobada té fotografia informada"""
