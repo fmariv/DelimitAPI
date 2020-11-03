@@ -24,9 +24,10 @@ import numpy
 import re
 
 # Third party imports
+import geopandas as gpd
+from osgeo import gdal
 from django.http import JsonResponse
 from django.views import View
-import fiona
 
 # Local imports
 from CQline.config import *
@@ -46,23 +47,16 @@ class CheckQualityLine(View):
         print("Procés per dur a terme el control de qualitat d'una línia")
         print("=========================================================")
 
-        # Set class parameters
-        self.set_config(line_id)
+        # Set up parameters
+        self.set_up(line_id)
 
-        # Check if line ID is valid
-        if line_id is None:
-            return
+        # Delete temp files
+        self.del_temp()
 
-        # Write first log message
-        self.write_first_report()
+        # Copy layers and tables from line folder to work local geopackage
+        self.copy_line_2_cqline()
 
         '''
-        # Esborrar arxius temporals
-        self.del_temp(False)
-
-        # Copiar les capes i taules de Docdelim de la linia a CQlinia.gdb
-        self.copy_line_2_cqlinia()
-
         # Comprovar si l'IDLINIA existeix a FitaG i Lin_Tram_Proposta
         self.check_id_linia(self.id_linia_num)
 
@@ -105,21 +99,28 @@ class CheckQualityLine(View):
 
         return JsonResponse({'data': '-- Linia {} checkejada --\n'.format(line_id)})
 
-    def set_config(self, line_id):
+    def set_up(self, line_id):
         """
 
         :param line_id:
         :return:
         """
+        # Set line ID
         self.line_id = line_id
         # Convert line ID from integer to string nnnn
         self.line_id_txt = self.line_id_2_txt(line_id)
+
         # Get current date and time
         self.current_date = datetime.now().strftime("%Y%m%d-%H%M")
+
         # Configure logger
         self.logger = logging.getLogger()
         self.set_logging_config()
-        self.set_logging_config()
+        # Write first log message
+        self.write_first_report()
+
+        # Check and set directories paths
+        self.set_directories()
 
     def set_logging_config(self):
         """
@@ -133,10 +134,36 @@ class CheckQualityLine(View):
         # Log filename and path
         log_name = f"ReportCQ_{self.line_id_txt}_{self.current_date}.txt"
         # log_path = os.path.join(LINES_DIR, str(self.line_id), WORK_REC_DIR, log_name)
-        log_path = os.path.join(r'C:\Users\fmart\Documents\Work\ICGC\DelimitAPI\logs', log_name)
+        log_path = os.path.join(LOG_DIR, log_name)
         file_handler = logging.FileHandler(filename=log_path, mode='w')
         file_handler.setFormatter(log_format)
         self.logger.addHandler(file_handler)
+
+    def set_directories(self):
+        """Check if the directory tree structure and content is correct and set paths to directories"""
+        tree_valid = False
+
+        line_folder = os.path.join(UPLOAD_DIR, str(self.line_id))
+        if path.exists(line_folder):   # Check if the line folder exists at the loading folder
+            self.line_folder = line_folder
+            doc_delim = os.path.join(self.line_folder, 'DocDelim')
+            if path.exists(doc_delim):  # Check the DocDelim folder exists
+                self.doc_delim = doc_delim
+                for sub_dir in SUB_DIR_LIST:  # Check if all the subdirs exist
+                    if sub_dir in os.listdir(self.doc_delim):
+                        tree_valid = True
+                    else:
+                        self.logger.error(f'No existeix el subdirectori {sub_dir}')
+                        return
+            else:
+                self.logger.error('No existeix DocDelim dins el directori de la línia')
+        else:
+            self.logger.error('No existeix la línia al directori de càrrega')
+
+        if tree_valid:
+            self.carto_folder = os.path.join(self.doc_delim, 'Cartografia')
+            self.tables_folder = os.path.join(self.doc_delim, 'Taules')
+            self.logger.info('Estructura de directoris OK')
 
     @staticmethod
     def line_id_2_txt(line_id_int):
@@ -157,66 +184,57 @@ class CheckQualityLine(View):
 
         return line_id_txt
 
-    def check_directory(self, line_id):
-        """Funció per comprovar que l'estructura i contingut de la carpeta són correctes"""
-        msg = ("Estructura de directoris OK", "No existeix DocDelim dins el directori de la linia",
-               "No existeix la linia al directori YYYY")
-        # TODO Fix check directory
-        # subdirectoris en funció de l'idLinia:
-        line_folder = os.path.join(DIR_ENTRADA, str(line_id))
-        doc_delim = os.path.join(line_folder, r"DocDelim")
-        tree_valid = False
-
-        if path.exists(line_folder):  # Check if the line folder exists at the loading folder
-            if path.exists(doc_delim):  # Check the DocDelim folder exists
-                for subDir in SUB_DIR_LIST:  # Check if subdirs exist
-                    if subDir in os.listdir(doc_delim):
-                        tree_valid = True
-                    else:
-                        self.write_report("No existeix {}".format(subDir), "error")
+    def check_entities_exist(self):
+        """
+        Check if all the necessary shapefiles and tables exists
+        :return:
+        """
+        entities_exist = False
+        for shape in SHAPES_LIST:
+            shape_path = os.path.join(self.carto_folder, shape)
+            if path.exists(shape_path):
+                shapes_exist = True
             else:
-                self.write_report(msg[1], "error")
-        else:
-            self.write_report(msg[2], "error")
+                shapes_exist = False
 
-        if tree_valid:
-            self.write_report(msg[0], "ok")
+        for dbf in TABLE_LIST:
+            dbf_path = os.path.join(self.tables_folder, dbf)
+            if path.exists(dbf_path):
+                entities_exist = True
+            else:
+                entities_exist = False
 
-    def copy_line_2_cqlinia(self):
-        """Funció per copiar les capes i taules de Docdelim de la linia de YYYY a CQlinia.gdb"""
-        msg = ("Capes i taules de {} copiades a CQlinia.gdb".format(self.id_linia_num),
-               "No existeixen les capes i taules necessaries a DocDelim")
+        return entities_exist
 
-        # subdirectoris en funció de l'idLinia:
-        linia_folder = DIR_ENTRADA + "\\" + str(self.id_linia_num)
-        doc_delim = linia_folder + r"\DocDelim"
-        print
-        doc_delim
+    def copy_line_2_cqline(self):
+        """Copy all the feature classes and tables from the line's folder to the local work geopackage"""
+        entities_exist = self.check_entities_exist()
 
-        try:  # Comprovar que existeixen les capes i taules necessàries per pujar a SIDM2
-            for fc in FC_LIST:
-                if arcpy.Exists(doc_delim + "\\" + SUB_DIR_LIST[0] + "\\" + fc):  # comprovar capes de "Cartografia"
-                    try:
-                        arcpy.FeatureClassToGeodatabase_conversion(doc_delim + "\\" + SUB_DIR_LIST[0] + "\\" + fc,
-                                                                   ESQUEMA_CQLINIA)
-                    except arcpy.ExecuteError:
-                        self.write_report("No s'ha pogut copiar {}".format(fc), 'error')
-                else:
-                    self.write_report("No existeix {}".format(fc), 'error')
+        if not entities_exist:
+            self.logger.error('No existeixen les capes i taules necessaries a DocDelim')
+            return
 
-            for dbf in TABLE_LIST:
-                if arcpy.Exists(doc_delim + "\\" + SUB_DIR_LIST[3] + "\\" + dbf):  # comprovar taules de "Cartografia"
-                    try:
-                        arcpy.TableToGeodatabase_conversion(doc_delim + "\\" + SUB_DIR_LIST[3] + "\\" + dbf, WORK)
-                    except arcpy.ExecuteError:
-                        self.write_report("No s'ha pogut copiar {}".format(dbf), 'error')
-                else:
-                    self.write_report("No existeix {}".format(dbf), 'error')
-            self.write_report(msg[0], "ok")
-        except RuntimeError:
-            self.write_report(msg[1], "error")
+        for shape in SHAPES_LIST:
+            shape_name = shape.split('.')[0]
+            shape_path = os.path.join(self.carto_folder, shape)
+            try:
+                shape_gdf = gpd.read_file(shape_path)
+                shape_gdf.to_file(WORK_GPKG, layer=shape_name, driver="GPKG")
+            except:
+                self.logger.error(f"No s'ha pogut copiar la capa {shape_name}")
+                return
 
-    # -- FUNCIONS QUE OBTENEN INFORMACIÓ DE CAPES I TAULES ----------------------------
+        for dbf in TABLE_LIST:
+            dbf_name = dbf.split('.')[0]
+            dbf_path = os.path.join(self.tables_folder, dbf)
+            try:
+                dbf_gdf = gpd.read_file(dbf_path)
+                dbf_gdf.to_file(WORK_GPKG, layer=dbf_name, driver="GPKG")
+            except:
+                self.logger.error(f"No s'ha pogut copiar la taula {dbf_name}")
+                return
+
+        self.logger.info(f"Capes i taules de la línia {self.line_id} copiades correctament a CQline.gpkg")
 
     @staticmethod
     def get_info_fc(fc, schema_path):
@@ -768,47 +786,21 @@ class CheckQualityLine(View):
         init_log_report = "ID Linia = {}:  Data i hora CQ: {}".format(self.line_id_txt, self.current_date)
         self.logger.info(init_log_report)
 
-    def del_temp(self, manual=True):
-        """Funció per a esborrar els temporals dins la CQlinia.gdb, si existeixen
-        :param manual -> <bool> Paràmetre per a indicar com es llença la funció. Veure explicació a sota.
+    def del_temp(self):
         """
 
-        '''
-        El paràmetre 'manual' indica si la funció del_temp es llença en el moment de checkejar una línia,
-        on s'esborren tots els temporals per a preparar l'espai de treball, o si per contra es llença 
-        manualment prement el botó. Aquest fet té implicacions bàsicament per reportar la resolució 
-        del procés, de manera que indica si s'ha de fer el report a un log (quan es checkeja una línia)
-        o només s'ha de fer el report a la caixa de text de sortida de l'aplicatiu. Permet evitar que, en aquest
-        últim cas, l'aplicatiu no detecti que no s'ha introduït un ID de línia
-        '''
+        :return:
+        """
+        gpkg = gdal.OpenEx(WORK_GPKG, gdal.OF_UPDATE, allowed_drivers=['GPKG'])
+        for layer in TEMP_ENTITIES:
+            layer_name = layer.split('.')[0]
+            try:
+                gpkg.ExecuteSQL(f'DROP TABLE {layer_name}')
+            except:
+                self.logger.error("Error esborrant arxius temporals")
+                return
 
-        msg = ("S'han esborrat els arxius temporals", "No s'han pogut esborrar els arxius temporals")
-
-        if not manual:
-            id_linia_intro_exists = self.get_id_linia_intro()
-        try:
-            # Comprovar si hi ha topologia a l'esquema principal que pugui bloquejar eliminar els arxius existents
-            if arcpy.Exists(TOPOLOGIA_BASE):
-                arcpy.Delete_management(TOPOLOGIA_BASE)
-            # Comprovar si hi ha topologia a l'esquema de la línia que pugui bloquejar eliminar els arxius existents
-            if arcpy.Exists(TOPOLOGIA_LINIA):
-                arcpy.Delete_management(TOPOLOGIA_LINIA)
-            # Eliminar temporals a l'espai de treball
-            if path.exists(WORK):
-                for dirpath, dirnames, datatypes in arcpy.da.Walk(WORK):
-                    for datatype in datatypes:
-                        if datatype != "FITA_G_temp" and datatype != "LIN_TRAM_PROPOSTA_temp":
-                            arcpy.Delete_management(os.path.join(dirpath, datatype))
-                self.app_writer.report(msg[0], 'ok')
-        except arcpy.ExecuteError:
-            if not manual:
-                if id_linia_intro_exists is None:
-                    self.app_writer.report(msg[1], 'error')
-                else:
-                    self.write_report(msg[1], 'error')
-                    exit()
-            else:
-                self.app_writer.report(msg[1], 'error')
+        self.logger.info('Arxius temporals esborrats')
 
     @staticmethod
     def open_mxd():

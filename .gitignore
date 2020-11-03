@@ -1,2 +1,4 @@
 # CQline config.py
 CQline/config.py
+# CQline db
+CQline/db/*
