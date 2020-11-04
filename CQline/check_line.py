@@ -8,12 +8,10 @@
 # Version Python: 3.7
 # ----------------------------------------------------------
 
-# TODO translate functions doc strings to english
-# TODO create class attribute for layers into geopackage
 # TODO comprovar amb capes que tinguin errors
 
 """
-Quality check and control of a line ready to upload to the database
+Quality check of a line ready to upload to the database
 """
 
 # Standard library imports
@@ -22,7 +20,6 @@ import os.path as path
 import decimal
 from datetime import datetime
 import logging
-import numpy
 import re
 
 # Third party imports
@@ -40,42 +37,68 @@ class CheckQualityLine(View):
     Class for checking a line's geometry and attributes quality previous to upload it into the database
     """
 
+    def __init__(self, **kwargs):
+        """
+        All the attributes are assigned to None and initialized into other methods
+        """
+        super().__init__(**kwargs)
+        # Environment parameters
+        self.line_id = None
+        self.line_id_txt = None
+        self.current_date = None
+        self.logger = None
+        self.ppf_list = None
+        # Paths to directories and folders
+        self.line_folder = None
+        self.doc_delim = None
+        self.carto_folder = None
+        self.tables_folder = None
+        # Geodataframes for data managing
+        self.lin_tram_ppta_sidm2_gdf = None
+        self.fita_g_sidm2_gdf = None
+        self.lin_tram_ppta_line_gdf = None
+        self.punt_line_gdf = None
+        self.p_proposta_gdf = None
+
     def get(self, request, line_id):
         """
         Main entry point. Here is where the magic is done. This method is called when someone wants to init the process of quality
         checking and is supposed to prepare the workspace, prepare the line and check it's geometry and attributes
         """
-        print()
-        print("Procés per dur a terme el control de qualitat d'una línia")
-        print("=========================================================")
-
+        # SET UP THE WORKING ENVIRONMENT -------------------------
         # Set up parameters
         self.set_up(line_id)
-
-        # Delete temp files
-        self.del_temp()
-
-        # Copy layers and tables from line folder to work local geopackage
+        # Check and set directories paths
+        directory_tree_valid = self.check_directories()
+        if directory_tree_valid:
+            self.set_directories()
+        else:
+            return
+        # Delete temp files from the workspace
+        self.rm_temp()
+        # Copy layers and tables from line's folder to the workspace
+        entities_exist = self.check_entities_exist()
+        if not entities_exist:
+            return
         self.copy_data_2_gpkg()
+        self.set_layers_gdf()
+        # Create list with only points that are "Proposta Final"
+        self.ppf_list = self.get_ppf_list()
 
+        # START CHECKING ------------------------------------------
         # Check if the line ID already exists into the database
         self.check_line_id_exists()
-
         # Check if the line's field structure and content is correct
         self.check_lin_tram_ppta_layer()
-
+        # Check the line and point's geometry
+        self.check_layers_geometry()
+        # Get info from the parts and vertexs of every line tram
+        self.info_vertexs_line()
         # TODO
-        # Crear llista amb les fites que son Proposta Final
-        self.get_ppf_list()
-        # self.llista_punts_ppta = self.ppf.totes(PUNT_PROPOSTA)
+        # Comprovar la decimetrització de les fites
+        self.decim_points()
 
         '''
-        # Donar informació sobre els vertex de les linies
-        self.info_vertex_linia()
-
-        # Comprovar la decimetrització de les fites
-        self.decim_fites()
-
         # Comprovar les fites Proposta Final
         self.check_ppf()
 
@@ -99,36 +122,29 @@ class CheckQualityLine(View):
 
     def set_up(self, line_id):
         """
-
-        :param line_id:
-        :return:
+        Set up the environment parameters that the class would need
+        :param line_id: line ID from the line the class is going to check
         """
         # Set line ID
         self.line_id = line_id
         # Convert line ID from integer to string nnnn
-        self.line_id_txt = self.line_id_2_txt(line_id)
-
+        self.line_id_txt = self.line_id_2_txt()
         # Get current date and time
         self.current_date = datetime.now().strftime("%Y%m%d-%H%M")
-
         # Configure logger
         self.logger = logging.getLogger()
         self.set_logging_config()
         # Write first log message
         self.write_first_report()
 
-        # Check and set directories paths
-        self.set_directories()
-
     def set_logging_config(self):
         """
-
-        :return:
+        Set up the logger config
         """
         # Logging level
         self.logger.setLevel(logging.INFO)
         # Message format
-        log_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        log_format = logging.Formatter("%(levelname)s - %(message)s")
         # Log filename and path
         log_name = f"ReportCQ_{self.line_id_txt}_{self.current_date}.txt"
         # log_path = os.path.join(LINES_DIR, str(self.line_id), WORK_REC_DIR, log_name)
@@ -137,40 +153,57 @@ class CheckQualityLine(View):
         file_handler.setFormatter(log_format)
         self.logger.addHandler(file_handler)
 
-    def set_directories(self):
-        """Check if the directory tree structure and content is correct and set paths to directories"""
-        tree_valid = False
+    def check_directories(self):
+        """Check if the directory tree structure and content is correct"""
+        tree_valid = True
 
         line_folder = os.path.join(UPLOAD_DIR, str(self.line_id))
-        if path.exists(line_folder):   # Check if the line folder exists at the loading folder
+        if path.exists(line_folder):  # Check if the line folder exists at the loading folder
             self.line_folder = line_folder
             doc_delim = os.path.join(self.line_folder, 'DocDelim')
             if path.exists(doc_delim):  # Check the DocDelim folder exists
                 self.doc_delim = doc_delim
                 for sub_dir in SUB_DIR_LIST:  # Check if all the subdirs exist
-                    if sub_dir in os.listdir(self.doc_delim):
-                        tree_valid = True
-                    else:
+                    if sub_dir not in os.listdir(self.doc_delim):
+                        tree_valid = False
                         self.logger.error(f'No existeix el subdirectori {sub_dir}')
-                        return
             else:
                 self.logger.error('No existeix DocDelim dins el directori de la línia')
+                tree_valid = False
         else:
             self.logger.error('No existeix la línia al directori de càrrega')
+            tree_valid = False
 
         if tree_valid:
-            self.carto_folder = os.path.join(self.doc_delim, 'Cartografia')
-            self.tables_folder = os.path.join(self.doc_delim, 'Taules')
             self.logger.info('Estructura de directoris OK')
 
-    @staticmethod
-    def line_id_2_txt(line_id_int):
+        return tree_valid
+
+    def set_directories(self):
+        """Set paths to directories"""
+        self.carto_folder = os.path.join(self.doc_delim, 'Cartografia')
+        self.tables_folder = os.path.join(self.doc_delim, 'Taules')
+
+    def set_layers_gdf(self):
+        """
+        Open all the necessary layers as geodataframes with geopandas
+        :return:
+        """
+        # SIDM2
+        self.lin_tram_ppta_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Lin_Tram_Proposta_SIDM2')
+        self.fita_g_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Fita_G_SIDM2')
+        # Line
+        self.lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
+        self.punt_line_gdf = gpd.read_file(WORK_GPKG, layer='Punt')
+        # Tables
+        self.p_proposta_gdf = gpd.read_file(WORK_GPKG, layer='P_Proposta')
+
+    def line_id_2_txt(self):
         """
         Convert line id (integer) to string nnnn
-        :param line_id_int -> <int> ID de línia introduit en format número
         :return: line_id_txt -> <string> ID de la línia introduit en format text
         """
-        line_id_str = str(line_id_int)
+        line_id_str = str(self.line_id)
         if len(line_id_str) == 1:
             line_id_txt = "000" + line_id_str
         elif len(line_id_str) == 2:
@@ -202,16 +235,13 @@ class CheckQualityLine(View):
             else:
                 entities_exist = False
 
+        if not entities_exist:
+            self.logger.error('No existeixen les capes i taules necessaries a DocDelim')
+
         return entities_exist
 
     def copy_data_2_gpkg(self):
         """Copy all the feature classes and tables from the line's folder to the local work geopackage"""
-        entities_exist = self.check_entities_exist()
-
-        if not entities_exist:
-            self.logger.error('No existeixen les capes i taules necessaries a DocDelim')
-            return
-
         for shape in SHAPES_LIST:
             shape_name = shape.split('.')[0]
             shape_path = os.path.join(self.carto_folder, shape)
@@ -260,27 +290,20 @@ class CheckQualityLine(View):
 
     def check_line_id_exists(self):
         """
-        Funció per a comprovar si l'IdLinia existeix a FitaG i Lin_Tram_Proposta
-        :param id_linia -> ID de la línia de la qual es vol comprovar si existeix a FitaG i Lin_Tram_Proposta
+        Check if the line ID already exists into the database, both into Fita_G and Lin_Tram_Proposta
         """
-        msg = ("L'IdLinia introduït no està repetit en SIDM2", "L'IdLinia introduït està en FitaG i Lin_Tram_Proposta",
-               "L'IdLinia introduït està FitaG pero no en Lin_Tram_Proposta",
-               "L'IdLinia introduït no està FitaG pero si en Lin_Tram_Proposta")
-
         line_id_in_lin_tram = False
         line_id_in_fita_g = False
 
         # Check into LIN_TRAM_PROPOSTA_SIDM2
-        lin_tram_ppta_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Lin_Tram_Proposta_SIDM2')
-        tram_duplicated_id = lin_tram_ppta_sidm2_gdf['ID_LINIA'] == self.line_id
-        tram_line_id = lin_tram_ppta_sidm2_gdf[tram_duplicated_id]
+        tram_duplicated_id = self.lin_tram_ppta_sidm2_gdf['ID_LINIA'] == self.line_id
+        tram_line_id = self.lin_tram_ppta_sidm2_gdf[tram_duplicated_id]
         if tram_line_id.shape[0] > 0:
             line_id_in_lin_tram = True
 
         # Check into FITA_G_SIDM2
-        fita_g_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Fita_G_SIDM2')
-        fita_g_duplicated_id = fita_g_sidm2_gdf['ID_LINIA'] == self.line_id
-        fita_g_line_id = fita_g_sidm2_gdf[fita_g_duplicated_id]
+        fita_g_duplicated_id = self.fita_g_sidm2_gdf['ID_LINIA'] == self.line_id
+        fita_g_line_id = self.fita_g_sidm2_gdf[fita_g_duplicated_id]
         if fita_g_line_id.shape[0] > 0:
             line_id_in_fita_g = True
 
@@ -295,15 +318,14 @@ class CheckQualityLine(View):
 
     def check_lin_tram_ppta_layer(self):
         """
-
+        Check line's layer's field structure and content
         :return:
         """
         self.check_fields_lin_tram_ppta()
         self.check_fields_content_lint_tram_ppta()
 
     def check_fields_lin_tram_ppta(self):
-        """Comprovar que l'estructura de camps de la capa Lin_TramPpta és correcte"""
-
+        """Check line's layer's field structure is correct"""
         # Fields that the line's layer must have
         true_fields = ('OBJECTID', 'ID_LINIA', 'ID', 'DATA', 'COMENTARI', 'P1', 'P2', 'P3', 'P4', 'PF',
                        'ID_FITA1', 'ID_FITA2', 'geometry')
@@ -324,25 +346,23 @@ class CheckQualityLine(View):
             self.logger.error("L'estructura de camps de Lin_TramPpta NO és correcte")
 
     def check_fields_content_lint_tram_ppta(self):
-        """Comprovar si la capa Lin_TramPpta té els camps correctament emplenats"""
-        lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
-
+        """Check line's layer's content is correct"""
         # Check that doesn't exist the line ID from another line
         line_id_error = False
-        not_line_id = lin_tram_ppta_line_gdf['ID_LINIA'] != self.line_id
-        tram_not_line_id = lin_tram_ppta_line_gdf[not_line_id]
+        not_line_id = self.lin_tram_ppta_line_gdf['ID_LINIA'] != self.line_id
+        tram_not_line_id = self.lin_tram_ppta_line_gdf[not_line_id]
         if tram_not_line_id.shape[0] > 1 and not line_id_error:
             line_id_error = True
             self.logger.error("Existeixen trams de línia amb l'ID_LINIA d'una altra línia")
 
         # Check that the fita ID is correct
-        # F1
         id_fita_error = False
-        id_f1_bad = lin_tram_ppta_line_gdf['ID_FITA1'] == 1
-        tram_id_f1_bad = lin_tram_ppta_line_gdf[id_f1_bad]
+        # F1
+        id_f1_bad = self.lin_tram_ppta_line_gdf['ID_FITA1'] == 1
+        tram_id_f1_bad = self.lin_tram_ppta_line_gdf[id_f1_bad]
         # F2
-        id_f2_bad = lin_tram_ppta_line_gdf['ID_FITA2'] == 1
-        tram_id_f2_bad = lin_tram_ppta_line_gdf[id_f2_bad]
+        id_f2_bad = self.lin_tram_ppta_line_gdf['ID_FITA2'] == 1
+        tram_id_f2_bad = self.lin_tram_ppta_line_gdf[id_f2_bad]
 
         if (tram_id_f1_bad.shape[0] > 1 or tram_id_f2_bad.shape[0] > 1) and not id_fita_error:
             id_fita_error = True
@@ -350,6 +370,102 @@ class CheckQualityLine(View):
 
         if not line_id_error and not id_fita_error:
             self.logger.info("Els camps de Lin_TramPpta estan correctament emplenats")
+
+    def get_ppf_list(self):
+        """
+        Get list with the ID of the only points that are "Punt Proposta Final", as known as "PPF"
+        :return: ppf_list - List with the ID of the PPF
+        """
+        is_ppf = self.p_proposta_gdf['PFF'] == 1
+        ppf = self.p_proposta_gdf[is_ppf]
+        ppf_list = ppf['ID_PUNT'].to_list()
+
+        return ppf_list
+
+    def check_layers_geometry(self):
+        """
+        Check the geometry of both line and points
+        """
+        self.logger.info('Comprovació de les geometries')
+        self.logger.info('Lin_Tram_Proposta :')
+        self.check_lin_tram_geometry()
+        self.logger.info('Punt :')
+        self.check_points_geometry()
+
+    def check_lin_tram_geometry(self):
+        """Check the line's geometry"""
+        error = False
+        # Check if there are empty features
+        is_empty = self.lin_tram_ppta_line_gdf.is_empty
+        empty_features = self.lin_tram_ppta_line_gdf[is_empty]
+        if empty_features.shape[0] > 0:
+            error = True
+            for index, feature in empty_features.iterrows():
+                tram_id = feature['ID']
+                self.logger.error(f'      El tram {tram_id} està buit')
+        # Check if there is a ring
+        is_ring = self.lin_tram_ppta_line_gdf.is_empty
+        ring_features = self.lin_tram_ppta_line_gdf[is_ring]
+        if ring_features.shape[0] > 0:
+            error = True
+            for index, feature in ring_features.iterrows():
+                tram_id = feature['ID']
+                self.logger.error(f'      El tram {tram_id} té un anell interior')
+        # Check if the geometry is valid
+        is_valid = self.lin_tram_ppta_line_gdf.is_valid
+        invalid_features = self.lin_tram_ppta_line_gdf[~is_valid]
+        if invalid_features.shape[0] > 0:
+            error = True
+            for index, feature in invalid_features.iterrows():
+                tram_id = feature['ID']
+                self.logger.error(f'      El tram {tram_id} no té una geometria vàlida')
+        # Check if the line is multi-part and count the parts in that case
+        for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
+            geom_type = feature['geometry'].geom_type
+            if geom_type == 'MultiLineString':
+                error = True
+                tram_id = feature['ID']
+                n_parts = feature['geometry'].geoms
+                self.logger.error(f'      El tram {tram_id} és multi-part i té {n_parts} parts')
+
+        if not error:
+            self.logger.info("      No s'ha detectat cap error de geometria a Lin_TramPpta")
+
+    def check_points_geometry(self):
+        """Check the points' geometry"""
+        error = False
+        # Check if there are empty features
+        is_empty = self.punt_line_gdf.is_empty
+        empty_features = self.punt_line_gdf[is_empty]
+        if empty_features.shape[0] > 0:
+            error = True
+            for index, feature in empty_features.iterrows():
+                point_id = feature['ID_PUNT']
+                self.logger.error(f'      El punt {point_id} està buit')
+        # Check if the geometry is valid
+        is_valid = self.punt_line_gdf.is_valid
+        invalid_features = self.punt_line_gdf[~is_valid]
+        if invalid_features.shape[0] > 0:
+            error = True
+            for index, feature in invalid_features.iterrows():
+                point_id = feature['ID_PUNT']
+                self.logger.error(f'      El punt {point_id} no té una geometria vàlida')
+
+        if not error:
+            self.logger.info("      No s'ha detectat cap error de geometria a la capa Punt")
+
+    def info_vertexs_line(self):
+        """Get info and make a recount of the line's vertexs"""
+        self.logger.info('Vèrtexs de la línia:')
+        self.logger.info('+---------+-----------+')
+        self.logger.info('| Tram ID | Nº vèrtex |')
+        self.logger.info('+---------+-----------+')
+
+        for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
+            tram_id = feature['ID']
+            tram_vertexs = len(feature['geometry'].coords)   # Nº of vertexs that compose the tram
+            self.logger.info(f"|    {tram_id}   |     {tram_vertexs}     |")
+            self.logger.info('+---------+-----------+')
 
     def check_fites_trobades(self):
         """
@@ -365,18 +481,36 @@ class CheckQualityLine(View):
         # Comprovar que si la fita té cota sigui fita trobada
         self.check_cota_fita()
 
-    @staticmethod
-    def get_ppf_list(self):
-        """
+    def decim_points(self):
+        """Check the points' decimals"""
+        val_ok2 = 0
 
-        :return:
-        """
-        p_proposta_gdf = gpd.read_file(WORK_GPKG, layer='P_Proposta')
-        is_ppf = p_proposta_gdf['PFF'] == 1
-        ppf = p_proposta_gdf[is_ppf]
-        ppf_list = ppf['ID_PUNT'].to_list()
+        array_punt = self.get_info_fc("Punt", ESQUEMA_CQLINIA)
 
-        return ppf_list
+        for row in array_punt:
+            punt_id = row[0]
+            if punt_id not in self.llista_punts_ppta:
+                where = numpy.where(array_punt == row)
+                where_array = where[0]
+                index = where_array[0]
+                array_punt = numpy.delete(array_punt, index)
+
+        for idPunt, coord, etiq, foto, contacte in array_punt:
+            e = "Punt {} no decimetritzat ({},{})".format(idPunt, coord[0], coord[1])
+            # Get coordinates
+            coord_x = str(coord[0])
+            coord_y = str(coord[1])
+            # Get decimals
+            coord_x_decim = decimal.Decimal(coord_x).as_tuple().exponent
+            coord_y_decim = decimal.Decimal(coord_y).as_tuple().exponent
+            # Aquí s'ha de modificar el número de decimals sobre els quals es volen capar les coordenades
+            # https://stackoverflow.com/questions/6189956/easy-way-of-finding-decimal-places
+            if coord_x_decim != -1 or coord_y_decim != -1:
+                self.write_report(e, "error")
+                val_ok2 = 1
+
+        if val_ok2 == 0:
+            self.write_report("Decimals fites OK", "ok")
 
     def check_foto_exists(self):
         """Funció per a comprovar que una fita trobada té fotografia informada"""
@@ -749,72 +883,6 @@ class CheckQualityLine(View):
         except:
             self.write_report(msg[5], "error")
 
-    def decim_fites(self):
-        """Funció per a comprovar la decimetrització de les fites"""
-        val_ok2 = 0
-
-        array_punt = self.get_info_fc("Punt", ESQUEMA_CQLINIA)
-
-        for row in array_punt:
-            punt_id = row[0]
-            if punt_id not in self.llista_punts_ppta:
-                where = numpy.where(array_punt == row)
-                where_array = where[0]
-                index = where_array[0]
-                array_punt = numpy.delete(array_punt, index)
-
-        for idPunt, coord, etiq, foto, contacte in array_punt:
-            e = "Punt {} no decimetritzat ({},{})".format(idPunt, coord[0], coord[1])
-            # Get coordinates
-            coord_x = str(coord[0])
-            coord_y = str(coord[1])
-            # Get decimals
-            coord_x_decim = decimal.Decimal(coord_x).as_tuple().exponent
-            coord_y_decim = decimal.Decimal(coord_y).as_tuple().exponent
-            # Aquí s'ha de modificar el número de decimals sobre els quals es volen capar les coordenades
-            # https://stackoverflow.com/questions/6189956/easy-way-of-finding-decimal-places
-            if coord_x_decim != -1 or coord_y_decim != -1:
-                self.write_report(e, "error")
-                val_ok2 = 1
-
-        if val_ok2 == 0:
-            self.write_report("Decimals fites OK", "ok")
-
-    def info_vertex_linia(self):
-        """Funció per a obtenir informació sobre els vertex de la linia"""
-        self.write_report('Vèrtex de la linia:', "info")
-
-        # Enter for loop for each feature
-        for row in arcpy.da.SearchCursor(LIN_TRAM_PPTA, ["OBJECTID", "SHAPE@"]):
-            partnum = 0
-            multipart = ""
-            try:
-                # Step through each part of the feature
-                for part in row[1]:
-                    # Step through each vertex in the feature
-                    vertex = 0
-                    for pnt in part:
-                        if pnt:
-                            vertex += 1
-                        else:
-                            # If pnt is None, this represents an interior ring
-                            print("Interior Ring:")
-
-                    if partnum > 0:
-                        multipart = "Error! (multipart)"
-                    partnum += 1
-            except TypeError:
-                e = "Un dels trams no té geometria. Si us plau, revisa'l."
-                self.write_report(e, 'error')
-                exit()
-
-            # Print info
-            missatge_sub_info = "Tram OBJECTID = {}:  Parts({})  Vèrtex({})  {}".format(row[0], partnum, vertex,
-                                                                                        multipart)
-            # Afegir un altre salt de línia per a diferenciar bé els trams al report...
-            missatge_sub_info = missatge_sub_info + "\n"
-            self.write_report(missatge_sub_info, "subinfo")
-
     def write_first_report(self):
         """
         Write first log's report
@@ -822,7 +890,7 @@ class CheckQualityLine(View):
         init_log_report = "ID Linia = {}:  Data i hora CQ: {}".format(self.line_id_txt, self.current_date)
         self.logger.info(init_log_report)
 
-    def del_temp(self):
+    def rm_temp(self):
         """
 
         :return:
