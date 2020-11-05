@@ -59,6 +59,7 @@ class CheckQualityLine(View):
         self.lin_tram_ppta_line_gdf = None
         self.punt_line_gdf = None
         self.p_proposta_gdf = None
+        self.punt_fit = None
 
     def get(self, request, line_id):
         """
@@ -94,20 +95,17 @@ class CheckQualityLine(View):
         self.check_layers_geometry()
         # Get info from the parts and vertexs of every line tram
         self.info_vertexs_line()
-        # TODO
-        # Comprovar la decimetrització de les fites
-        self.decim_points()
-
-        '''
-        # Comprovar les fites Proposta Final
-        self.check_ppf()
-
-        # Comprovar que les fites auxiliars tinguin correctament indicat el camp ID_FITA
+        # Check that the points are correctly rounded
+        self.check_points_decimals()
+        # Get info and check the features in P_Proposta
+        self.info_p_proposta()
+        # Check that an auxiliary point has correctly indicated its real point's ID
         self.check_aux_id()
 
         # Comprovar diferents aspectes de les fites trobades
-        self.check_fites_trobades()
-
+        # TODO
+        # self.check_fites_trobades()
+        '''
         # Comprovar les fites 3 termes
         self.check_3termes()
 
@@ -197,6 +195,7 @@ class CheckQualityLine(View):
         self.punt_line_gdf = gpd.read_file(WORK_GPKG, layer='Punt')
         # Tables
         self.p_proposta_gdf = gpd.read_file(WORK_GPKG, layer='P_Proposta')
+        self.punt_fit = gpd.read_file(WORK_GPKG, layer='PUNT_FIT')
 
     def line_id_2_txt(self):
         """
@@ -263,30 +262,6 @@ class CheckQualityLine(View):
                 return
 
         self.logger.info(f"Capes i taules de la línia {self.line_id} copiades correctament a CQline.gpkg")
-
-    @staticmethod
-    def get_info_fc(fc, schema_path):
-        """
-        Funció per a obtenir informació de la capa Punt
-        :param fc -> <shapefile> feature class de la qual es vol obtenir informació
-        :param schema_path -> <string> ruta on s'ubica la feature class de la qual es vol obtenir informacó
-        :return: arr -> <numpy array> array amb informació de la feature class introduida
-        """
-        camps_punt = ("ID_PUNT", "SHAPE@XY", "ETIQUETA", "FOTOS", "CONTACTE")
-        camps_punt_fit = ("ID_PUNT", "ID_FITA", "TROBADA", "AUX")
-        camps_p_proposta = ("ID_PUNT", "ESFITA", "PFF")
-
-        if fc == "Punt":
-            camps = camps_punt
-        elif fc == "PUNT_FIT":
-            camps = camps_punt_fit
-        else:
-            camps = camps_p_proposta
-
-        arr = arcpy.da.FeatureClassToNumPyArray(schema_path + "\\" + fc, camps)
-        print
-        arr
-        return arr
 
     def check_line_id_exists(self):
         """
@@ -467,6 +442,102 @@ class CheckQualityLine(View):
             self.logger.info(f"|    {tram_id}   |     {tram_vertexs}     |")
             self.logger.info('+---------+-----------+')
 
+    def check_points_decimals(self):
+        """Check if the points's decimals are correct and are rounded to 1 decimal"""
+        decim_valid = True
+        for index, feature in self.punt_line_gdf.iterrows():
+            # Point parameters
+            point_etiqueta = feature['ETIQUETA']
+            point_id = feature['ID_PUNT']
+            point_x = feature['geometry'].x
+            point_y = feature['geometry'].y
+            # Check if rounded correctly
+            dif_x = abs(point_x - round(point_x, 1))
+            dif_y = abs(point_y - round(point_y, 1))
+            if dif_x > 0.01 or dif_y > 0.01:
+                decim_valid = False
+                self.logger.error(f"El punt de la fita {point_id} | {point_etiqueta} no està correctament decimetritzat")
+
+        if decim_valid:
+            self.logger.info('Les fites estan correctament decimetritzades')
+
+    def info_p_proposta(self):
+        """
+        Get info and check the points in the table P_Proposta, like:
+            - Count the points and distinguish them depending on its type
+            - Check that the field ORDPF is not NULL
+            - Check that an auxiliary point is not indicated as a real point
+        """
+        self.logger.info('Informació de les fites :')
+        # Count the points in the table P_Proposta depending on the point's type
+        self.count_points()
+        # Check that ORDPF is not null
+        ordpf_valid = self.check_ordpf()
+        # Check that the points in P_Proposta are correctly indicated
+        real_points_valid = self.check_real_points()
+        if ordpf_valid and real_points_valid:
+            self.logger.info(f'Tots els registre de la taula P_Proposta són vàlids')
+
+    def count_points(self):
+        """Count the points in the table P_Proposta and distinguish them depending on its type"""
+        # Not final points
+        # PFF = 0
+        not_ppf = self.p_proposta_gdf['PFF'] == 0
+        not_final_points = self.p_proposta_gdf[not_ppf]
+        n_not_final_points = not_final_points.shape[0]
+        # Real points
+        # PFF = 1 AND ESFITA = 1
+        proposta_points = self.p_proposta_gdf.loc[(self.p_proposta_gdf['PFF'] == 1) & (self.p_proposta_gdf['ESFITA'] == 1)]
+        n_proposta_points = proposta_points.shape[0]
+        # Auxiliary points
+        # PFF = 1 AND ESFITA = 0
+        auxiliary_points = self.p_proposta_gdf.loc[(self.p_proposta_gdf['PFF'] == 1) & (self.p_proposta_gdf['ESFITA'] == 0)]
+        n_auxiliary_points = auxiliary_points.shape[0]
+
+        self.logger.info(f'      Fites PPF reals: {n_proposta_points}')
+        self.logger.info(f'      Fites PPF auxiliars: {n_auxiliary_points}')
+        self.logger.info(f'      Fites no finals: {n_not_final_points}')
+
+    def check_ordpf(self):
+        """Check the field ORDPF is not NULL"""
+        valid = True
+        ordpf_null = self.p_proposta_gdf['ORDPF'].isnull()
+        points_ordpf_null = self.p_proposta_gdf[ordpf_null]
+
+        if points_ordpf_null.shape[0] > 0:
+            valid = False
+            for index, feature in points_ordpf_null.iterrows():
+                point_id = feature['ID_PUNT']
+                self.logger.error(f"      El camp ORDPF del punt {point_id} és nul")
+
+        return valid
+
+    def check_real_points(self):
+        """Check that an auxiliary point is not indicated as a real point"""
+        # If PPF = 1 and ORDPF = 0 => ESFITA MUST BE 0
+        valid = True
+        bad_auxiliary_points = self.p_proposta_gdf.loc[(self.p_proposta_gdf['PFF'] == 1) &
+                                                       (self.p_proposta_gdf['ORDPF'] == 0) &
+                                                       (self.p_proposta_gdf['ESFITA'] != 0)]
+
+        if bad_auxiliary_points.shape[0] > 0:
+            valid = False
+            for index, feature in bad_auxiliary_points.iterrows():
+                point_id = feature['ID_PUNT']
+                self.logger.error(f"      El punt {point_id} està mal indicat a P_Proposta.")
+
+        return valid
+
+    def check_aux_id(self):
+        """Check that an auxiliary point has correctly indicated its real point's ID"""
+        real_points = self.punt_fit[self.punt_fit['AUX'] == '0']
+        auxiliary_points = self.punt_fit[self.punt_fit['AUX'] == '1']
+        auxiliary_points_id_list = auxiliary_points['ID_PUNT'].to_list()
+
+        for aux_id in auxiliary_points_id_list:
+            if aux_id not in real_points.values:
+                self.logger.error(F"      La fita auxiliar {aux_id} no té correctament indicat l'ID de la fita real"
+
     def check_fites_trobades(self):
         """
         Funció per a comprovar diferents aspectes de les fites trobades, com són:
@@ -480,37 +551,6 @@ class CheckQualityLine(View):
         self.check_name_fotos()
         # Comprovar que si la fita té cota sigui fita trobada
         self.check_cota_fita()
-
-    def decim_points(self):
-        """Check the points' decimals"""
-        val_ok2 = 0
-
-        array_punt = self.get_info_fc("Punt", ESQUEMA_CQLINIA)
-
-        for row in array_punt:
-            punt_id = row[0]
-            if punt_id not in self.llista_punts_ppta:
-                where = numpy.where(array_punt == row)
-                where_array = where[0]
-                index = where_array[0]
-                array_punt = numpy.delete(array_punt, index)
-
-        for idPunt, coord, etiq, foto, contacte in array_punt:
-            e = "Punt {} no decimetritzat ({},{})".format(idPunt, coord[0], coord[1])
-            # Get coordinates
-            coord_x = str(coord[0])
-            coord_y = str(coord[1])
-            # Get decimals
-            coord_x_decim = decimal.Decimal(coord_x).as_tuple().exponent
-            coord_y_decim = decimal.Decimal(coord_y).as_tuple().exponent
-            # Aquí s'ha de modificar el número de decimals sobre els quals es volen capar les coordenades
-            # https://stackoverflow.com/questions/6189956/easy-way-of-finding-decimal-places
-            if coord_x_decim != -1 or coord_y_decim != -1:
-                self.write_report(e, "error")
-                val_ok2 = 1
-
-        if val_ok2 == 0:
-            self.write_report("Decimals fites OK", "ok")
 
     def check_foto_exists(self):
         """Funció per a comprovar que una fita trobada té fotografia informada"""
@@ -640,61 +680,6 @@ class CheckQualityLine(View):
         self.write_report(missatge_ok2, "ok")
 
         arcpy.DeleteField_management(PUNT, "ORDRE")  # Eliminar el camp d'ordre creat
-
-    def check_aux_id(self):
-        """Funció per a comprovar que les fites auxiliars tenen correctament indicat l'ID de la seva fita real"""
-        id_fita_real_arr = arcpy.da.FeatureClassToNumPyArray(PUNT_FIT, 'ID_FITA', where_clause="AUX = '0'")
-        id_fita_aux_arr = arcpy.da.FeatureClassToNumPyArray(PUNT_FIT, 'ID_FITA', where_clause="AUX = '1'")
-        for id_fita in id_fita_aux_arr:
-            if id_fita not in id_fita_real_arr:
-                id_fita_num = id_fita[0]
-                self.write_report(
-                    "La fita auxiliar {} no te correctament indicat l'ID de la fita real".format(id_fita_num),
-                    'error')
-
-    def check_ppf(self):
-        """Funció per a fer les comprovacions de les fites de proposta final a la taula P_Proposta"""
-        # Informar de quantes fites hi ha informades a la taula pProposta.
-        # També: informar de quantes són PF )i si són o no auxiliars) i quantes són Propostes no finals
-        val_ok = 0
-        fites_proposta = 0
-        fites_auxiliars = 0
-        fites_no_finals = 0
-
-        with arcpy.da.SearchCursor(PUNT_PROPOSTA, ("PFF", "ESFITA")) as cursor:
-            for row in cursor:
-                if row[0] == 1 and row[1] == 1:
-                    fites_proposta += 1
-                elif row[0] == 1 and row[1] == 0:
-                    fites_auxiliars += 1
-                elif row[0] == 0:
-                    fites_no_finals += 1
-        info = " Informació de les fites \n   => Fites PFF reals: " + str(
-            fites_proposta) + "\n   => Fites PFF auxiliars: " + str(
-            fites_auxiliars) + "\n   => Fites no finals (PFn): " + str(fites_no_finals)
-        self.write_report(info, "info")
-
-        # Comprovar que l'ORDPF de les fites no té un valor nul
-        with arcpy.da.SearchCursor(PUNT_PROPOSTA, ("ID_PUNT", "ORDPF")) as cursor:
-            for row in cursor:
-                if row[1] is None:
-                    self.write_report("L'ORDPF del punt {0} és nul".format(row[0]), "error")
-                else:
-                    val_ok += 1
-
-        # Comprovar que si PFF = 1 i ORDPF = 0 => ESFITA = 0
-        with arcpy.da.SearchCursor(PUNT_PROPOSTA, ("ID_PUNT", "PFF", "ORDPF", "ESFITA")) as cursor:
-            for row in cursor:
-                if row[1] == 1 and row[2] == 0:
-                    if row[3] != 0:
-                        self.write_report("El punt {0} té error de codificació a la Proposta".format(row[0]),
-                                          "error")
-                else:
-                    val_ok += 1
-        print
-        val_ok
-        if val_ok == 2:
-            self.write_report("Estructura de p_proposta OK", "ok")
 
     def check_corresp_fites_taules(self):
         """Funció per a comprovar la correspondencia entre taules i capes segons ID_PUNT"""
