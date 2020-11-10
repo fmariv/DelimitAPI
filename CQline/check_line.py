@@ -36,30 +36,26 @@ class CheckQualityLine(View):
     """
     Class for checking a line's geometry and attributes quality previous to upload it into the database
     """
-
-    def __init__(self, **kwargs):
-        """
-        All the attributes are assigned to None and initialized into other methods
-        """
-        super().__init__(**kwargs)
-        # Environment parameters
-        self.line_id = None
-        self.line_id_txt = None
-        self.current_date = None
-        self.logger = None
-        self.ppf_list = None
-        # Paths to directories and folders
-        self.line_folder = None
-        self.doc_delim = None
-        self.carto_folder = None
-        self.tables_folder = None
-        # Geodataframes for data managing
-        self.lin_tram_ppta_sidm2_gdf = None
-        self.fita_g_sidm2_gdf = None
-        self.lin_tram_ppta_line_gdf = None
-        self.punt_line_gdf = None
-        self.p_proposta_gdf = None
-        self.punt_fit = None
+    # Environment parameters
+    line_id = None
+    line_id_txt = None
+    current_date = datetime.now().strftime("%Y%m%d-%H%M")
+    logger = logging.getLogger()
+    ppf_list = None
+    founded_points_dict = None
+    # Paths to directories and folders
+    line_folder = None
+    doc_delim = None
+    carto_folder = None
+    tables_folder = None
+    photo_folder = None
+    # Geodataframes for data managing
+    lin_tram_ppta_sidm2_gdf = None
+    fita_g_sidm2_gdf = None
+    lin_tram_ppta_line_gdf = None
+    punt_line_gdf = None
+    p_proposta_df = None
+    punt_fit_df = None
 
     def get(self, request, line_id):
         """
@@ -85,6 +81,8 @@ class CheckQualityLine(View):
         self.set_layers_gdf()
         # Create list with only points that are "Proposta Final"
         self.ppf_list = self.get_ppf_list()
+        # Create dict with the only points that are founded and PPF
+        self.founded_points_dict = self.get_founded_points_dict()
 
         # START CHECKING ------------------------------------------
         # Check if the line ID already exists into the database
@@ -101,10 +99,8 @@ class CheckQualityLine(View):
         self.info_p_proposta()
         # Check that an auxiliary point has correctly indicated its real point's ID
         self.check_aux_id()
-
         # Comprovar diferents aspectes de les fites trobades
-        # TODO
-        # self.check_fites_trobades()
+        self.check_found_points()
         '''
         # Comprovar les fites 3 termes
         self.check_3termes()
@@ -127,10 +123,7 @@ class CheckQualityLine(View):
         self.line_id = line_id
         # Convert line ID from integer to string nnnn
         self.line_id_txt = self.line_id_2_txt()
-        # Get current date and time
-        self.current_date = datetime.now().strftime("%Y%m%d-%H%M")
         # Configure logger
-        self.logger = logging.getLogger()
         self.set_logging_config()
         # Write first log message
         self.write_first_report()
@@ -181,6 +174,7 @@ class CheckQualityLine(View):
         """Set paths to directories"""
         self.carto_folder = os.path.join(self.doc_delim, 'Cartografia')
         self.tables_folder = os.path.join(self.doc_delim, 'Taules')
+        self.photo_folder = os.path.join(self.doc_delim, 'Fotografies')
 
     def set_layers_gdf(self):
         """
@@ -194,8 +188,8 @@ class CheckQualityLine(View):
         self.lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
         self.punt_line_gdf = gpd.read_file(WORK_GPKG, layer='Punt')
         # Tables
-        self.p_proposta_gdf = gpd.read_file(WORK_GPKG, layer='P_Proposta')
-        self.punt_fit = gpd.read_file(WORK_GPKG, layer='PUNT_FIT')
+        self.p_proposta_df = gpd.read_file(WORK_GPKG, layer='P_Proposta')
+        self.punt_fit_df = gpd.read_file(WORK_GPKG, layer='PUNT_FIT')
 
     def line_id_2_txt(self):
         """
@@ -348,14 +342,30 @@ class CheckQualityLine(View):
 
     def get_ppf_list(self):
         """
-        Get list with the ID of the only points that are "Punt Proposta Final", as known as "PPF"
+        Get dataframe with the ID of the only points that are "Punt Proposta Final", as known as "PPF"
         :return: ppf_list - List with the ID of the PPF
         """
-        is_ppf = self.p_proposta_gdf['PFF'] == 1
-        ppf = self.p_proposta_gdf[is_ppf]
-        ppf_list = ppf['ID_PUNT'].to_list()
+        is_ppf = self.p_proposta_df['PFF'] == 1
+        ppf_df = self.p_proposta_df[is_ppf]
+        ppf_list = ppf_df['ID_PUNT'].to_list()
 
         return ppf_list
+
+    def get_founded_points_dict(self):
+        """
+        Get a dict of the founded PPF points with etiqueta as key and ID_PUNT as value
+        :return:
+        """
+        points_founded_dict = {}
+        founded = self.punt_fit_df['TROBADA'] == '1'
+        points_founded = self.punt_line_gdf[founded]
+        for index, feature in points_founded.iterrows():
+            if feature['ID_PUNT'] in self.ppf_list:
+                point_id = feature['ID_PUNT']
+                etiqueta = feature['ETIQUETA']
+                points_founded_dict[etiqueta] = point_id
+
+        return points_founded_dict
 
     def check_layers_geometry(self):
         """
@@ -482,16 +492,16 @@ class CheckQualityLine(View):
         """Count the points in the table P_Proposta and distinguish them depending on its type"""
         # Not final points
         # PFF = 0
-        not_ppf = self.p_proposta_gdf['PFF'] == 0
-        not_final_points = self.p_proposta_gdf[not_ppf]
+        not_ppf = self.p_proposta_df['PFF'] == 0
+        not_final_points = self.p_proposta_df[not_ppf]
         n_not_final_points = not_final_points.shape[0]
         # Real points
         # PFF = 1 AND ESFITA = 1
-        proposta_points = self.p_proposta_gdf.loc[(self.p_proposta_gdf['PFF'] == 1) & (self.p_proposta_gdf['ESFITA'] == 1)]
+        proposta_points = self.p_proposta_df.loc[(self.p_proposta_df['PFF'] == 1) & (self.p_proposta_df['ESFITA'] == 1)]
         n_proposta_points = proposta_points.shape[0]
         # Auxiliary points
         # PFF = 1 AND ESFITA = 0
-        auxiliary_points = self.p_proposta_gdf.loc[(self.p_proposta_gdf['PFF'] == 1) & (self.p_proposta_gdf['ESFITA'] == 0)]
+        auxiliary_points = self.p_proposta_df.loc[(self.p_proposta_df['PFF'] == 1) & (self.p_proposta_df['ESFITA'] == 0)]
         n_auxiliary_points = auxiliary_points.shape[0]
 
         self.logger.info(f'      Fites PPF reals: {n_proposta_points}')
@@ -501,8 +511,8 @@ class CheckQualityLine(View):
     def check_ordpf(self):
         """Check the field ORDPF is not NULL"""
         valid = True
-        ordpf_null = self.p_proposta_gdf['ORDPF'].isnull()
-        points_ordpf_null = self.p_proposta_gdf[ordpf_null]
+        ordpf_null = self.p_proposta_df['ORDPF'].isnull()
+        points_ordpf_null = self.p_proposta_df[ordpf_null]
 
         if points_ordpf_null.shape[0] > 0:
             valid = False
@@ -516,9 +526,9 @@ class CheckQualityLine(View):
         """Check that an auxiliary point is not indicated as a real point"""
         # If PPF = 1 and ORDPF = 0 => ESFITA MUST BE 0
         valid = True
-        bad_auxiliary_points = self.p_proposta_gdf.loc[(self.p_proposta_gdf['PFF'] == 1) &
-                                                       (self.p_proposta_gdf['ORDPF'] == 0) &
-                                                       (self.p_proposta_gdf['ESFITA'] != 0)]
+        bad_auxiliary_points = self.p_proposta_df.loc[(self.p_proposta_df['PFF'] == 1) &
+                                                       (self.p_proposta_df['ORDPF'] == 0) &
+                                                       (self.p_proposta_df['ESFITA'] != 0)]
 
         if bad_auxiliary_points.shape[0] > 0:
             valid = False
@@ -530,113 +540,84 @@ class CheckQualityLine(View):
 
     def check_aux_id(self):
         """Check that an auxiliary point has correctly indicated its real point's ID"""
-        real_points = self.punt_fit[self.punt_fit['AUX'] == '0']
-        auxiliary_points = self.punt_fit[self.punt_fit['AUX'] == '1']
+        real_points = self.punt_fit_df[self.punt_fit_df['AUX'] == '0']
+        auxiliary_points = self.punt_fit_df[self.punt_fit_df['AUX'] == '1']
         auxiliary_points_id_list = auxiliary_points['ID_PUNT'].to_list()
 
         for aux_id in auxiliary_points_id_list:
             if aux_id not in real_points.values:
-                self.logger.error(F"      La fita auxiliar {aux_id} no té correctament indicat l'ID de la fita real"
+                self.logger.error(f"      La fita auxiliar {aux_id} no té correctament indicat l'ID de la fita real")
 
-    def check_fites_trobades(self):
+    def check_found_points(self):
         """
-        Funció per a comprovar diferents aspectes de les fites trobades, com són:
-            - Que tinguin fotografia
-            - Que la fotografia existeixi a la carpeta corresponent
-            - Que si té cota indicada sigui fita trobada
+        Check diferent things about the founded points, like:
+            - Has photography
+            - The photography exists in its folder
+            - If the point has Z coordinate must be founded point
         """
-        # Comprovar que la fita trobada té fotografia informada
-        self.check_foto_exists()
-        # Comprovar que la foto existeix a la carpeta de fotografies
-        self.check_name_fotos()
-        # Comprovar que si la fita té cota sigui fita trobada
+        # Check that the point has a photography indicated
+        self.check_photo_exists()
+        # Check that the photography exists in the photo's folder
+        self.check_photo_name()
+        # Check that if the point has Z coordinate is a founded point
+        # TODO
         self.check_cota_fita()
 
-    def check_foto_exists(self):
-        """Funció per a comprovar que una fita trobada té fotografia informada"""
-        # Crear llista de fites amb fotos
-        sql_fites_fotos = "WHERE FOTOS <> ''"
-        with arcpy.da.SearchCursor(PUNT, "ID_PUNT", sql_clause=(None, sql_fites_fotos)) as cursor:
-            llista_fites_fotos = [id_punt for id_punt in cursor]
-        # Comprovar que les fites trobades tenen fotografia
-        llista_fites_sense_foto = []
-        sql_fites_trobades = "WHERE TROBADA = '1'"
-        with arcpy.da.SearchCursor(PUNT_FIT, "ID_PUNT", sql_clause=(None, sql_fites_trobades)) as cursor:
-            llista_fites_sense_foto = [id_punt for id_punt in cursor if id_punt not in llista_fites_fotos]
+    def check_photo_exists(self):
+        """Check that a founded point has a photography"""
+        # Get a list of points with photography
+        photo_exists = self.punt_line_gdf['FOTOS'].notnull()
+        points_with_photo = self.punt_line_gdf[photo_exists]
+        points_with_photo_list = points_with_photo['ID_PUNT'].to_list()
+        # Only points that are PPF
+        ppf_with_photo_list = [point_id for point_id in points_with_photo_list if point_id in self.ppf_list]
+        # Get a dict with the founded points without photography
+        founded_points_no_photo = {etiqueta(id_punt) for etiqueta, id_punt in self.founded_points_dict.items() if id_punt not in ppf_with_photo_list}
 
-        # Comprovar que les fites trobades tenen fotografia informada
-        if not llista_fites_sense_foto:
-            self.write_report("Concordança entre el camp TROBADA i el camp FOTOGRAFIA, OK", "ok")
+        if not founded_points_no_photo:
+            self.logger.info('Totes les fites trobades tenene fotografia')
         else:
-            for id_punt in llista_fites_sense_foto:
-                self.write_report('La fita {} és trobada però no té cap fotografia indicada'.format(id_punt), "error")
+            for etiqueta, id_punt in founded_points_no_photo.items():
+                self.logger.error(f'      La {etiqueta} - {id_punt} és trobada però no té cap fotografia indicada')
 
-    def check_name_fotos(self):
-        """Funció per a comprovar que la fotografia informada té el mateix nom que el fitxer .JPG"""
-        # subdirectoris en funció de l'idLinia:
-        linia_folder = DIR_ENTRADA + "\\" + str(self.id_linia_num)
-        foto_folder = linia_folder + '/DocDelim/Fotografies'
-        llista_fotos_folder = []  # Llista amb les fotografies que hi ha a la carpeta
+    def check_photo_name(self):
+        """Check that the photography in the layer has the same name as de .JPG file"""
+        # Get a list with the photographies's filename in the photography folder
+        folder_photos_filenames = [f for f in os.listdir(self.photo_folder) if os.path.isfile(os.path.join(self.photo_folder, f))
+                                   and (f.endswith(".jpg") or f.endswith(".JPG"))]
+        # Get a list with the photographies's filename from PPF
+        photo_exists = self.punt_line_gdf['FOTOS'].notnull()
+        points_with_photo = self.punt_line_gdf[photo_exists]
+        founded_points_photos = [feature['FOTOS'] for index, feature in points_with_photo.iterrows() if feature['FOTOS'] in self.ppf_list]
+        # Check that the photography in the point layer has the same filename as the photography into the folder
+        photos_valid = True
+        for photo_filename in founded_points_photos:
+            if photo_filename not in folder_photos_filenames:
+                photos_valid = False
+                self.logger.error(f'La fotografia {photo_filename} no està a la carpeta de Fotografies')
 
-        # Construir llista amb els noms de les fotografies que hi ha a la carpeta
-        for dirpath, dirnames, datatypes in os.walk(foto_folder):
-            for foto in datatypes:
-                if foto.endswith(".jpg") or foto.endswith(".JPG"):
-                    llista_fotos_folder.append(foto)
-
-        # Construir llista amb els noms de les fotografies que hi ha a la fc
-        sql_fites_fotos = "FOTOS <> ''"
-        # Llista amb les fotografies que hi ha indicades a la FC Punt i són de fites Proposta final
-        llista_fotos_fc = []
-        try:
-            with arcpy.da.SearchCursor(PUNT, field_names=["ID_PUNT", "FOTOS"],
-                                       where_clause=sql_fites_fotos) as cursor:
-                for id_punt, foto in cursor:
-                    if id_punt in self.llista_punts_ppta:
-                        llista_fotos_fc.append(foto)
-        except:
-            self.write_report("No s'han pogut comprovar les fites amb fotografia de la FC Punt", "error")
-
-        # Comprovar que la fotografia informada té el mateix nom que el fitxer JPG
-        for nomfoto in llista_fotos_fc:
-            if nomfoto not in llista_fotos_folder:
-                self.write_report("{0} no està a la carpeta de Fotografies".format(nomfoto), "error")
-            else:
-                self.write_report("{0} està a la carpeta de Fotografies".format(nomfoto), "ok")
+        if photos_valid:
+            self.logger.info('Totes les fotografies informades a la capa Punt estan a la carpeta de Fotografies')
 
     def check_cota_fita(self):
-        """Funció per a comprovar que una fita amb cota és trobada"""
-        msg = "No s'ha pogut comprovar si les fites amb coordenada Z són trobades"
+        """Check that a point with Z coordinate is founded"""
+        # Get a list with the PPF that have Z coordinate
+        ppf_z_dict = {}
+        for index, feature in self.punt_line_gdf.iterrows():
+            etiqueta = feature['ETIQUETA']
+            point_id = feature['ID_PUNT']
+            z_coord = feature['geometry'].z
+            if z_coord > 0 and point_id in self.ppf_list:
+                ppf_z_dict[etiqueta] = point_id
 
-        # Crear llista de fites de la fc punt que tenen cota indicada
-        llista_fites_cota = []
-        try:
-            with arcpy.da.SearchCursor(PUNT, field_names=["ID_PUNT", "SHAPE@Z"]) as cursor:
-                for row in cursor:
-                    if row[1] != 0 and row[0] in self.llista_punts_ppta:
-                        llista_fites_cota.append(row[0])
-        except:
-            self.write_report(msg, "error")
+        z_coord_valid = True
+        for etiqueta, id_punt in ppf_z_dict.items():
+            if id_punt not in self.founded_points_dict.values():
+                z_coord_valid = False
+                self.logger.error(f'La {etiqueta} - {id_punt} té coordenada Z però no és fita trobada')
 
-        # Crear llista de fites de la taula PUNT_FIT que són trobades
-        llista_fites_trobades = []
-        try:
-            sql_fites_trobades = "TROBADA = '1'"
-            with arcpy.da.SearchCursor(PUNT_FIT, field_names="ID_PUNT", where_clause=sql_fites_trobades) as cursor:
-                for row in cursor:
-                    llista_fites_trobades.append(row[0])
-        except:
-            self.write_report(msg, "error")
-
-        # Comprovar que les fites amb cota estan indicades com a trobades
-        try:
-            for fita in llista_fites_cota:
-                if fita not in llista_fites_trobades:
-                    self.write_report("El punt {0} té coordenada Z però no és fita trobada".format(fita), "error")
-                else:
-                    self.write_report('El punt {0} té coordenada Z i és fita trobada'.format(fita), "ok")
-        except:
-            self.write_report(msg, "error")
+        if z_coord_valid:
+            self.logger.info('Totes les fites amb coordenada Z són trobades')
 
     def check_3termes(self):
         """Funció per a comprovar les fites 3 termes"""
