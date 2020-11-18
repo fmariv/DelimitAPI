@@ -99,15 +99,13 @@ class CheckQualityLine(View):
         self.info_p_proposta()
         # Check that an auxiliary point has correctly indicated its real point's ID
         self.check_aux_id()
-        # Comprovar diferents aspectes de les fites trobades
+        # Check some aspects about founded points
         self.check_found_points()
-        '''
-        # Comprovar les fites 3 termes
+        # Check that the 3T points are informed correctly
         self.check_3termes()
-
-        # Comprovar la correspondència entre taules i capes
-        self.check_corresp_fites_taules()
-
+        # Check the relation between the tables and the point layer
+        self.check_relation_points_tables()
+        '''
         # Fer els controls topològics
         self.check_topology()
         '''
@@ -560,7 +558,6 @@ class CheckQualityLine(View):
         # Check that the photography exists in the photo's folder
         self.check_photo_name()
         # Check that if the point has Z coordinate is a founded point
-        # TODO
         self.check_cota_fita()
 
     def check_photo_exists(self):
@@ -620,84 +617,51 @@ class CheckQualityLine(View):
             self.logger.info('Totes les fites amb coordenada Z són trobades')
 
     def check_3termes(self):
-        """Funció per a comprovar les fites 3 termes"""
+        """Check 3 terms points"""
         msg = ("Les F3T tenen informat el camp CONTACTE", "Hi ha fites 3 termes sense contacte")
 
-        # Crear un camp nou a la capa punt per a poder ordenar-la correctament
-        arcpy.AddField_management(PUNT, "ORDRE", "SHORT")
-
-        with arcpy.da.UpdateCursor(PUNT, field_names=("ID_PUNT", "ETIQUETA", "ORDRE")) as cursor:
-            for row in cursor:
-                if row[0] in self.llista_punts_ppta:
-                    etiqueta = row[1]
-                    # Comprovar si l'etiqueta del punt conté "aux", "AUX" o "Aux"
-                    aux_exists = re.search('aux', etiqueta.lower())
-                    if aux_exists is None:
-                        row[2] = int(re.findall(r'\d+', etiqueta)[0])
-                        cursor.updateRow(row)
-
-        llista_contacte = []  # LLista amb el contingut dels camps de contacte
-        with arcpy.da.SearchCursor(PUNT,
-                                   field_names=("ID_PUNT", "CONTACTE",
-                                                "ETIQUETA", "ORDRE"), sql_clause=(None,
-                                                                                  "ORDER BY ORDRE ASC")) as cursor:
-            for row in cursor:
-                if row[0] in self.llista_punts_ppta and row[3]:
-                    llista_contacte.append(row[1])
-
-        # Comprovar si la primera i l'última fita de la línia tenen text al camp de contacte
-        if len(llista_contacte[0]) > 1 and len(llista_contacte[-1]) > 1:
-            self.write_report(msg[0], "ok")
+        # Get df with points sorted by etiqueta
+        sorted_points_df = self.punt_line_gdf.sort_values(by=['ETIQUETA'])
+        # Get a list with the contact field from both first and last point
+        first_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[0]
+        last_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[-1]
+        if first_point['CONTACTE'] and last_point['CONTACTE']:
+            self.logger.info('Les fites 3T tenen informat el camp CONTACTE')
         else:
-            self.write_report(msg[1], "error")
+            self.logger.error('Hi ha fites 3T sense tenir informat el camp CONTACTE')
 
-        # Fer un recompte del nº de fites que tenen el camp de contacte amb text
-        n_contacte = 0
-        for camp in llista_contacte:
-            if len(camp) > 1:
-                n_contacte += 1
-        n_contacte = str(n_contacte)
-        missatge_ok2 = "Hi ha un total de {0} fites amb el camp CONTACTE informat".format(n_contacte)
-        self.write_report(missatge_ok2, "ok")
+        # Recount how many points have the CONTACTE field not empty
+        informed_3t_points = self.punt_line_gdf[self.punt_line_gdf['CONTACTE'].notnull()]
+        n_informed_3t_points = informed_3t_points.shape[0]
+        self.logger.info(f'Hi ha un total de {n_informed_3t_points} fites amb el camp CONTACTE informat')
 
-        arcpy.DeleteField_management(PUNT, "ORDRE")  # Eliminar el camp d'ordre creat
+    def check_relation_points_tables(self):
+        """Check that all the points that exist in the tables exist in the point layer"""
+        self.logger.info('Comprovant correspondència entre les taules i la capa Punt...')
+        points_id_list = self.punt_line_gdf['ID_PUNT'].tolist()
 
-    def check_corresp_fites_taules(self):
-        """Funció per a comprovar la correspondencia entre taules i capes segons ID_PUNT"""
-        msg = ("Correspondència OK entre els punts de P_PROPOSTA i PUNT",
-               "Correspondència OK entre els punts de PUNT_FIT i PUNT")
+        # Check that all the ID_PUNT from P_Proposta exist in the point layer
+        p_proposta_valid = True
+        for index, feature in self.p_proposta_df.iterrows():
+            point_id = feature['ID_PUNT']
+            if point_id not in points_id_list:
+                p_proposta_valid = False
+                self.logger.error(f'El punt {point_id} de la taula P_PROPOSTA no està a la capa Punt')
+        if p_proposta_valid:
+            self.logger.info('      Correspondència OK entre els punts de P_PROPOSTA i Punt')
 
-        llista_punts = []  # Llista amb tots els ID_PUNT de la capa Punt
-        with arcpy.da.SearchCursor(PUNT, "ID_PUNT") as cursor:
-            for row in cursor:
-                llista_punts.append(row)
-
-        # Comprovar que tots els ID_PUNT de P_Proposta estan a la capa Punt
-        # report_info("Comprovant correspondència P_Proposta amb Punt...")
-        val_ok3 = 0
-        with arcpy.da.SearchCursor(PUNT_PROPOSTA, "ID_PUNT") as cursor:
-            for row in cursor:
-                if row not in llista_punts:
-                    missatge_bad1 = "El punt {0} de P_PROPOSTA no està a la capa PUNT".format(row[0])
-                    self.write_report(missatge_bad1, "error")
-                    val_ok3 = 1
-        if val_ok3 == 0:
-            self.write_report(msg[0], "ok")
-
-        # Comprovar que tots els ID_PUNT de PUNT_FIT estan a la capa Punt
-        # report_info("Comprovant correspondència PUNT_FIT amb PUNT...")
-        val_ok4 = 0
-        with arcpy.da.SearchCursor(PUNT_FIT, "ID_PUNT") as cursor:
-            for row in cursor:
-                if row not in llista_punts:
-                    self.write_report("El punt {0} de PUN_FIT no està a la capa PUNT".format(row[0]),
-                                      "error")
-                    val_ok4 = 1
-        if val_ok4 == 0:
-            self.write_report(msg[1], "ok")
+        # Check that all the ID_PUNT from PUNT_FIT exist in the point layer
+        punt_fit_valid = True
+        for index_, feature_ in self.punt_fit_df.iterrows():
+            point_id_ = feature_['ID_PUNT']
+            if point_id_ not in points_id_list:
+                punt_fit_valid = False
+                self.logger.error(f'El punt {point_id_} de la taula PUNT_FIT no està a la capa Punt')
+        if punt_fit_valid:
+            self.logger.info('      Correspondència OK entre els punts de PUNT_FIT i Punt')
 
     def check_topology(self):
-        """Funció per a fer els controls topologics"""
+        """Check topology"""
         # Exportar les fc punt i linTramPpta
         arcpy.FeatureClassToFeatureClass_conversion(PUNT, ESQUEMA_CQLINIA_LINIA, "Punt_linia")
         arcpy.FeatureClassToFeatureClass_conversion(LIN_TRAM_PPTA, ESQUEMA_CQLINIA_LINIA, "Lin_TramPpta_linia")
@@ -872,8 +836,7 @@ class CheckQualityLine(View):
 
         self.logger.info('Arxius temporals esborrats')
 
-    @staticmethod
-    def open_mxd():
-        """Open project mxd"""
 
-        os.startfile(MXD_PATH)
+def open_qgs():
+    """Open project qgs"""
+    os.startfile(MXD_PATH)

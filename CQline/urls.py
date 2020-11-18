@@ -1,5 +1,5 @@
 from django.urls import path
-from CQline.check_line import CheckQualityLine
+from CQline.views import CheckQualityLine
 
 '''
 Class-based views
