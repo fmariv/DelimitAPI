@@ -17,15 +17,13 @@ Quality check of a line ready to upload to the database
 # Standard library imports
 import os
 import os.path as path
-import decimal
 from datetime import datetime
 import logging
-import re
 
 # Third party imports
 import geopandas as gpd
 from osgeo import gdal
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views import View
 
 # Local imports
@@ -56,6 +54,9 @@ class CheckQualityLine(View):
     punt_line_gdf = None
     p_proposta_df = None
     punt_fit_df = None
+    # Coordinates data structures
+    points_coords_dict = None
+    line_coords_list = None
 
     def get(self, request, line_id):
         """
@@ -83,6 +84,10 @@ class CheckQualityLine(View):
         self.ppf_list = self.get_ppf_list()
         # Create dict with the only points that are founded and PPF
         self.founded_points_dict = self.get_founded_points_dict()
+        # Get a dict with the points ID and them coordinates
+        self.points_coords_dict = self.get_round_point_coordinates()
+        # Get a list with the line coordinates
+        self.line_coords_list = self.get_round_line_coordinates()
 
         # START CHECKING ------------------------------------------
         # Check if the line ID already exists into the database
@@ -105,12 +110,11 @@ class CheckQualityLine(View):
         self.check_3termes()
         # Check the relation between the tables and the point layer
         self.check_relation_points_tables()
-        '''
         # Fer els controls topològics
+        # TODO
         self.check_topology()
-        '''
 
-        return JsonResponse({'data': '-- Linia {} checkejada --\n'.format(line_id)})
+        return JsonResponse({'data': f'Linia {line_id} checkejada'})
 
     def set_up(self, line_id):
         """
@@ -265,13 +269,13 @@ class CheckQualityLine(View):
         # Check into LIN_TRAM_PROPOSTA_SIDM2
         tram_duplicated_id = self.lin_tram_ppta_sidm2_gdf['ID_LINIA'] == self.line_id
         tram_line_id = self.lin_tram_ppta_sidm2_gdf[tram_duplicated_id]
-        if tram_line_id.shape[0] > 0:
+        if not tram_line_id.empty:
             line_id_in_lin_tram = True
 
         # Check into FITA_G_SIDM2
         fita_g_duplicated_id = self.fita_g_sidm2_gdf['ID_LINIA'] == self.line_id
         fita_g_line_id = self.fita_g_sidm2_gdf[fita_g_duplicated_id]
-        if fita_g_line_id.shape[0] > 0:
+        if not fita_g_line_id.empty:
             line_id_in_fita_g = True
 
         if line_id_in_fita_g and line_id_in_lin_tram:
@@ -318,7 +322,7 @@ class CheckQualityLine(View):
         line_id_error = False
         not_line_id = self.lin_tram_ppta_line_gdf['ID_LINIA'] != self.line_id
         tram_not_line_id = self.lin_tram_ppta_line_gdf[not_line_id]
-        if tram_not_line_id.shape[0] > 1 and not line_id_error:
+        if not tram_not_line_id.empty:
             line_id_error = True
             self.logger.error("Existeixen trams de línia amb l'ID_LINIA d'una altra línia")
 
@@ -331,7 +335,7 @@ class CheckQualityLine(View):
         id_f2_bad = self.lin_tram_ppta_line_gdf['ID_FITA2'] == 1
         tram_id_f2_bad = self.lin_tram_ppta_line_gdf[id_f2_bad]
 
-        if (tram_id_f1_bad.shape[0] > 1 or tram_id_f2_bad.shape[0] > 1) and not id_fita_error:
+        if not tram_id_f1_bad.empty or not tram_id_f2_bad.empty:
             id_fita_error = True
             self.logger.error("El camp ID_FITA d'algun dels trams de la línia no és vàlid")
 
@@ -377,64 +381,51 @@ class CheckQualityLine(View):
 
     def check_lin_tram_geometry(self):
         """Check the line's geometry"""
-        error = False
         # Check if there are empty features
         is_empty = self.lin_tram_ppta_line_gdf.is_empty
         empty_features = self.lin_tram_ppta_line_gdf[is_empty]
-        if empty_features.shape[0] > 0:
-            error = True
+        if not empty_features.empty:
             for index, feature in empty_features.iterrows():
                 tram_id = feature['ID']
                 self.logger.error(f'      El tram {tram_id} està buit')
         # Check if there is a ring
         is_ring = self.lin_tram_ppta_line_gdf.is_empty
         ring_features = self.lin_tram_ppta_line_gdf[is_ring]
-        if ring_features.shape[0] > 0:
-            error = True
+        if not ring_features.empty:
             for index, feature in ring_features.iterrows():
                 tram_id = feature['ID']
                 self.logger.error(f'      El tram {tram_id} té un anell interior')
-        # Check if the geometry is valid
-        is_valid = self.lin_tram_ppta_line_gdf.is_valid
-        invalid_features = self.lin_tram_ppta_line_gdf[~is_valid]
-        if invalid_features.shape[0] > 0:
-            error = True
-            for index, feature in invalid_features.iterrows():
-                tram_id = feature['ID']
-                self.logger.error(f'      El tram {tram_id} no té una geometria vàlida')
         # Check if the line is multi-part and count the parts in that case
+        not_multipart = True
         for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
             geom_type = feature['geometry'].geom_type
             if geom_type == 'MultiLineString':
-                error = True
+                not_multipart = False
                 tram_id = feature['ID']
                 n_parts = feature['geometry'].geoms
                 self.logger.error(f'      El tram {tram_id} és multi-part i té {n_parts} parts')
 
-        if not error:
+        if empty_features.empty and ring_features.empty and not_multipart:
             self.logger.info("      No s'ha detectat cap error de geometria a Lin_TramPpta")
 
     def check_points_geometry(self):
         """Check the points' geometry"""
-        error = False
         # Check if there are empty features
         is_empty = self.punt_line_gdf.is_empty
         empty_features = self.punt_line_gdf[is_empty]
-        if empty_features.shape[0] > 0:
-            error = True
+        if not empty_features.empty:
             for index, feature in empty_features.iterrows():
                 point_id = feature['ID_PUNT']
                 self.logger.error(f'      El punt {point_id} està buit')
         # Check if the geometry is valid
         is_valid = self.punt_line_gdf.is_valid
         invalid_features = self.punt_line_gdf[~is_valid]
-        if invalid_features.shape[0] > 0:
-            error = True
+        if not invalid_features.empty:
             for index, feature in invalid_features.iterrows():
                 point_id = feature['ID_PUNT']
                 self.logger.error(f'      El punt {point_id} no té una geometria vàlida')
 
-        if not error:
+        if empty_features.empty and invalid_features.empty:
             self.logger.info("      No s'ha detectat cap error de geometria a la capa Punt")
 
     def info_vertexs_line(self):
@@ -512,7 +503,7 @@ class CheckQualityLine(View):
         ordpf_null = self.p_proposta_df['ORDPF'].isnull()
         points_ordpf_null = self.p_proposta_df[ordpf_null]
 
-        if points_ordpf_null.shape[0] > 0:
+        if not points_ordpf_null.empty:
             valid = False
             for index, feature in points_ordpf_null.iterrows():
                 point_id = feature['ID_PUNT']
@@ -528,7 +519,7 @@ class CheckQualityLine(View):
                                                        (self.p_proposta_df['ORDPF'] == 0) &
                                                        (self.p_proposta_df['ESFITA'] != 0)]
 
-        if bad_auxiliary_points.shape[0] > 0:
+        if not bad_auxiliary_points.empty:
             valid = False
             for index, feature in bad_auxiliary_points.iterrows():
                 point_id = feature['ID_PUNT']
@@ -662,156 +653,116 @@ class CheckQualityLine(View):
 
     def check_topology(self):
         """Check topology"""
-        # Exportar les fc punt i linTramPpta
-        arcpy.FeatureClassToFeatureClass_conversion(PUNT, ESQUEMA_CQLINIA_LINIA, "Punt_linia")
-        arcpy.FeatureClassToFeatureClass_conversion(LIN_TRAM_PPTA, ESQUEMA_CQLINIA_LINIA, "Lin_TramPpta_linia")
+        self.logger.info('Iniciant controls topològics...')
+        # Check that the line doesn't crosses or overlaps itself
+        self.check_line_crosses_itself()
+        # Check that the line doesn't intersect the db lines
+        self.check_line_intersects_db()
+        # Check that hte line doesn't overlaps the db lines
+        self.check_line_overlaps_db()
+        # Check that the lines endpoints are equal to any point
+        self.check_endpoint_covered_point()
+        # Check that if a point is not over a line is because it's an auxiliary point
+        self.check_auxiliary_point()
 
-        # Controls topològics de la mateixa línia
-        self.check_topology_line()
+    def check_line_crosses_itself(self):
+        """Check that the line doesn't intersects or touches itself"""
+        is_valid = self.lin_tram_ppta_line_gdf.is_valid
+        invalid_features = self.lin_tram_ppta_line_gdf[~is_valid]
+        if not invalid_features.empty:
+            for index, feature in invalid_features.iterrows():
+                tram_id = feature['ID']
+                self.logger.error(f"      El tram {tram_id} s'intersecta o toca a sí mateix")
+        else:
+            self.logger.info("      Els trams de la línia no s'intersecten o toquen a sí mateixos")
 
-        # Controls topològics de la linia amb la base general
-        self.check_topology_gdb()
+    def check_line_intersects_db(self):
+        """Check that the line doesn't intersects or crosses the database lines"""
+        intersects_db = self.lin_tram_ppta_line_gdf.intersects(self.lin_tram_ppta_sidm2_gdf)
+        features_intersects_db = self.lin_tram_ppta_line_gdf[intersects_db]
+        if not features_intersects_db.empty:
+            for index, feature in features_intersects_db.iterrows():
+                self.logger.error(f"      El tram {feature['ID']} talla algun tram de la base de dades")
+        else:
+            self.logger.info('      Els trams de la línia no intersecten cap tram de la base de dades')
 
-    def check_topology_line(self):
-        """Funció per a fer els controls topològics de la mateixa linia"""
-        msg = ("Topologia de la linia creada i validada. Revisa els errors topològics",
-               "No s'ha pogut crear la topologia de la linia", "No s'han pogut afegir les FC a la topologia",
-               "No s'han pogut afegir les regles a la topologia", "No s'ha pogut validar la topologia")
+    def check_line_overlaps_db(self):
+        """Check that the line doesn't overlaps the database lines"""
+        overlaps_db = self.lin_tram_ppta_line_gdf.overlaps(self.lin_tram_ppta_sidm2_gdf)
+        features_overlaps_db = self.lin_tram_ppta_line_gdf[overlaps_db]
+        if not features_overlaps_db.empty:
+            for index, feature in features_overlaps_db.iterrows():
+                self.logger.error(f"      El tram {feature['ID']} es sobreposa a algun tram de la base de dades")
+        else:
+            self.logger.info('      Els trams de la línia no es sobreposen a cap tram de la base de dades')
 
-        # Variables d'entrada
-        topo_nom = "CQlinia_Topology_linia"
-        cluster_tol = 0.001
+    def check_endpoint_covered_point(self):
+        """Check that the coordinates of the lines endpoints are equal to any point"""
+        # Check if the lines endpoints coordinates are equal to any point
+        endpoint_covered = True
+        for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
+            tram_id = feature['ID']
+            # Get and round endpoints coordinates
+            first_endpoint_no_rounded = feature['geometry'].coords[0]
+            first_endpoint = (round(first_endpoint_no_rounded[0], 1), round(first_endpoint_no_rounded[1], 1))
+            last_endpoint_no_rounded = feature['geometry'].coords[-1]
+            last_endpoint = (round(last_endpoint_no_rounded[0], 1), round(last_endpoint_no_rounded[1], 1))
 
-        # Llista amb les fc de la topologia
-        fc_topologia_linia = (PUNT_LINIA, LIN_TRAM_PPTA_LINIA)
+            if (first_endpoint or last_endpoint) not in self.points_coords_dict.values():
+                endpoint_covered = False
+                self.logger.error(f'      Algun dels punts finals del tram {tram_id} no coincideix amb una fita de la capa Punt')
 
-        # Crear la topologia
-        try:
-            if not arcpy.Exists(TOPOLOGIA_LINIA):
-                arcpy.CreateTopology_management(ESQUEMA_CQLINIA_LINIA, topo_nom, cluster_tol)
-                print("-- Topologia de la linia creada. Iniciant controls topologics... ------------")
-            else:
-                arcpy.Delete_management(TOPOLOGIA_LINIA)
-                arcpy.CreateTopology_management(ESQUEMA_CQLINIA_LINIA, topo_nom, cluster_tol)
-                print("-- Topologia de la linia creada. Iniciant controls topologics... ------------")
-        except:
-            self.write_report(msg[1], "error")
+        if endpoint_covered:
+            self.logger.info('      Tots els punts finals dels trams de la línia coincideixen amb una fita de la capa Punt')
 
-        # Afegir les fc a la topologia
-        try:
-            for fc in fc_topologia_linia:
-                arcpy.AddFeatureClassToTopology_management(TOPOLOGIA_LINIA, fc)
-            print("     FC afegides a la topologia...")
-        except:
-            self.write_report(msg[2], "error")
+    def get_round_point_coordinates(self):
+        """
+        Get a dict of the points ID and coordinates, and round them to 1 decimal
+        :return: points_coord_dict - Dict of points coordinates with format (x, y)
+        """
+        # Get ID
+        points_id = self.punt_line_gdf['ID_PUNT'].tolist()
+        # Get coordinates
+        x_coords_no_round_list = self.punt_line_gdf['geometry'].x.tolist()
+        x_coords_list = [round(x, 1) for x in x_coords_no_round_list]
+        y_coords_no_round_list = self.punt_line_gdf['geometry'].y.tolist()
+        y_coords_list = [round(y, 1) for y in y_coords_no_round_list]
+        # Get list with the points coordinates
+        points_coord_list = list(zip(x_coords_list, y_coords_list))
+        # Enrich list with the point id and convert to dict
+        points_coord_dict = dict(zip(points_id, points_coord_list))
 
-        # Afegir regles de topologia
-        topology_rules_self_line = (
-            # Els trams han d'acabar sempre en una fita
-            (TOPOLOGIA_LINIA, "Endpoint Must Be Covered By (Line-Point)", LIN_TRAM_PPTA_LINIA, "", PUNT_LINIA, ""),
-            # Una fita no pot estar sobre un tram
-            (TOPOLOGIA_LINIA, "Must Be Covered By (Point-Line)", PUNT_LINIA, "", LIN_TRAM_PPTA_LINIA, ""),
-            # No pot haver sobre posició entre trams
-            (TOPOLOGIA_LINIA, "Must Not Overlap (Line)", LIN_TRAM_PPTA_LINIA, "", "", ""),
-            # No pot haver intersecció entre trams
-            (TOPOLOGIA_LINIA, "Must Not Intersect (Line)", LIN_TRAM_PPTA_LINIA, "", "", ""),
-            # No pot haver sobre posicions entre un mateix tram
-            (TOPOLOGIA_LINIA, "Must Not Self-Overlap (Line)", LIN_TRAM_PPTA_LINIA, "", "", ""),
-            # No pot haver interseccións entre un mateix tram
-            (TOPOLOGIA_LINIA, "Must Not Self-Intersect (Line)", LIN_TRAM_PPTA_LINIA, "", "", "")
-        )
-        try:
-            for in_topology, rule_type, in_featureclass, subtype, in_featureclass2, subtype2 in topology_rules_self_line:
-                arcpy.AddRuleToTopology_management(in_topology, rule_type, in_featureclass,
-                                                   subtype, in_featureclass2, subtype2)
-            print
-            "     Regles afegides a la topologia..."
-        except:
-            self.write_report(msg[3], "error")
+        return points_coord_dict
 
-        # Validar la topologia
-        try:
-            arcpy.ValidateTopology_management(TOPOLOGIA_LINIA)
-            self.write_report(msg[0], "info")
-        except:
-            self.write_report(msg[4], "error")
+    def check_auxiliary_point(self):
+        """
+        Check if a point that is not covered by the line is an auxiliary point
+        """
+        # Check if the point is covered by the line
+        for point_id, point_coords in self.points_coords_dict.items():
+            if point_coords not in self.line_coords_list:
+                point = self.punt_fit_df.loc[self.punt_fit_df['ID_PUNT'] == point_id]
+                aux = point['AUX'].values[0]
+                n_fita = point['ID_FITA'].values[0]
+                if aux == 1:
+                    self.logger.info(f'      La F-{n_fita} no està a sobre de la línia i és auxiliar')
+                else:
+                    self.logger.error(f'      La F-{n_fita} no està a sobre de la línia i NO és auxiliar')
 
-    def check_topology_gdb(self):
-        """Funció per a fer els controls topologics de la linia amb la base general"""
-        msg = ("Topologia de la base creada i validada. Revisa els errors topològics",
-               "No s'ha pogut afegir la línia a la base general", "No s'ha pogut crear una nova topologia",
-               "No s'han pogut afegir les fc a la topologia", "No s'han pogut afegir les regles de topologia",
-               "No s'ha pogut validar la topologia")
+    def get_round_line_coordinates(self):
+        """
+        Get a list with the line's coordinates and rount them to 1 decimal
+        :return: line_coords_list - List with the line's coordinates
+        """
+        line_coords_no_rounded = []
+        trams = self.lin_tram_ppta_line_gdf['geometry'].tolist()
+        for t in trams:
+            tram_coords = t.coords
+            for v in tram_coords:
+                line_coords_no_rounded.append(v)
+        line_coords_list = [(round(x, 1), round(y, 1)) for x, y in line_coords_no_rounded]
 
-        # Variables d'entrada
-        topo_nom = "CQlinia_Topology_base"
-        cluster_tol = 0.001
-
-        # Afegir la línia a la base general
-        lin_tram_general = ESQUEMA_CQLINIA + "/Lin_Tram_Base"
-        try:
-            if arcpy.Exists(lin_tram_general):
-                if arcpy.Exists(TOPOLOGIA_BASE):
-                    arcpy.Delete_management(TOPOLOGIA_BASE)
-                arcpy.Delete_management(lin_tram_general)
-            arcpy.Merge_management([LIN_TRAM_PPTA, LIN_TRAM_PROPOSTA], lin_tram_general)
-            print
-            "     Linia afegida a la base general..."
-        except arcpy.ExecuteError:
-            self.write_report(msg[1], "error")
-
-        # Llista amb les fc de la topologia
-        fc_topologia_base = [FITA_G, lin_tram_general, PUNT]
-
-        # Comprovar si existeig ja una topologia. Si existeix, la elimina
-        try:
-            if arcpy.Exists(TOPOLOGIA_BASE):
-                arcpy.Delete_management(TOPOLOGIA_BASE)
-            arcpy.CreateTopology_management(ESQUEMA_CQLINIA, topo_nom, cluster_tol)
-            print("-- Topologia de la base creada. Iniciant controls topologics... ------------")
-        except:
-            self.write_report(msg[2], "error")
-
-        # Afegir les fc a la topologia
-        try:
-            for fc in fc_topologia_base:
-                arcpy.AddFeatureClassToTopology_management(TOPOLOGIA_BASE, fc)
-            print("FC afegides a la topologia...")
-        except:
-            self.write_report(msg[3], "error")
-
-        # Afegir regles de topologia
-        topology_rules_line_gdb = (
-            # Les linies han d'acabar sempre en una fita
-            (TOPOLOGIA_BASE, "Endpoint Must Be Covered By (Line-Point)", lin_tram_general, "", FITA_G, ""),
-            # No pot haver sobre posició entre linies
-            (TOPOLOGIA_BASE, "Must Not Overlap (Line)", lin_tram_general, "", "", ""),
-            # No pot haver intersecció entre linies
-            (TOPOLOGIA_BASE, "Must Not Intersect (Line)", lin_tram_general, "", "", ""),
-            # No pot haver sobre posicions entre una mateixa lina
-            (TOPOLOGIA_BASE, "Must Not Self-Overlap (Line)", lin_tram_general, "", "", ""),
-            # No pot haver interseccións entre una mateixa lina
-            (TOPOLOGIA_BASE, "Must Not Self-Intersect (Line)", lin_tram_general, "", "", ""),
-            # Les línies han d'acabar sempre amb una altra linia
-            (TOPOLOGIA_BASE, "Must Not Have Dangles (Line)", lin_tram_general, "", "", ""),
-            # Les fites de la linia han de coincidir amb les de la base
-            (TOPOLOGIA_BASE, "Must Coincide With (Point-Point)", PUNT, "", FITA_G, "")
-        )
-        try:
-            for in_topology, rule_type, in_featureclass, subtype, in_featureclass2, subtype2 in topology_rules_line_gdb:
-                arcpy.AddRuleToTopology_management(in_topology, rule_type, in_featureclass,
-                                                   subtype, in_featureclass2, subtype2)
-            print
-            "     Regles afegides a la topologia..."
-        except:
-            self.write_report(msg[4], "error")
-
-        # Validar la topologia
-        try:
-            arcpy.ValidateTopology_management(TOPOLOGIA_BASE)
-            self.write_report(msg[0], "info")
-        except:
-            self.write_report(msg[5], "error")
+        return line_coords_list
 
     def write_first_report(self):
         """
@@ -822,7 +773,7 @@ class CheckQualityLine(View):
 
     def rm_temp(self):
         """
-
+        Remove temporal files from the workspace
         :return:
         """
         gpkg = gdal.OpenEx(WORK_GPKG, gdal.OF_UPDATE, allowed_drivers=['GPKG'])
@@ -837,6 +788,7 @@ class CheckQualityLine(View):
         self.logger.info('Arxius temporals esborrats')
 
 
-def open_qgs():
+def open_qgis(request):
     """Open project qgs"""
-    os.startfile(MXD_PATH)
+    os.startfile(QGS_PATH)
+    return JsonResponse({'data': 'QGIS obert correctament'})
