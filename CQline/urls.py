@@ -8,6 +8,6 @@ Class-based views
 '''
 
 urlpatterns = [
-    path('check-line/<int:line_id>', CheckQualityLine.as_view()),
-    path('check-line/open-qgis', open_qgis)
+    path('<int:line_id>/', CheckQualityLine.as_view()),
+    path('open-qgis/', open_qgis)
 ]

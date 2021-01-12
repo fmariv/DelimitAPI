@@ -19,6 +19,7 @@ import os
 import os.path as path
 from datetime import datetime
 import logging
+import json
 
 # Third party imports
 import geopandas as gpd
@@ -32,13 +33,14 @@ from CQline.config import *
 
 class CheckQualityLine(View):
     """
-    Class for checking a line's geometry and attributes quality previous to upload it into the database
+    Class for checking a line's geometry and attributes quality previously to upload it into the database
     """
-    # Environment parameters
+    # Workspace parameters
     line_id = None
     line_id_txt = None
     current_date = datetime.now().strftime("%Y%m%d-%H%M")
     logger = logging.getLogger()
+    log_path = None
     ppf_list = None
     founded_points_dict = None
     # Paths to directories and folders
@@ -57,6 +59,8 @@ class CheckQualityLine(View):
     # Coordinates data structures
     points_coords_dict = None
     line_coords_list = None
+    # Json response
+    response_data = {}
 
     def get(self, request, line_id):
         """
@@ -71,14 +75,28 @@ class CheckQualityLine(View):
         if directory_tree_valid:
             self.set_directories()
         else:
-            return
-        # Delete temp files from the workspace
-        self.rm_temp()
-        # Copy layers and tables from line's folder to the workspace
+            msg = "L'estructura de directoris de la carpeta DocDelim de la linia no es correcte"
+            self.create_error_response(msg)
+            return JsonResponse(self.response_data)   # Send response as error
+        # Remove temp files from the workspace
+        rem_temp_ok = self.rm_temp()
+        if not rem_temp_ok:
+            msg = 'Error esborrant arxius temporals'
+            self.create_error_response(msg)
+            return JsonResponse(self.response_data)
+        # Check if all the necessary entities exist
         entities_exist = self.check_entities_exist()
         if not entities_exist:
-            return
-        self.copy_data_2_gpkg()
+            msg = 'Falten capes o taules necessaries pel proces de QA'
+            self.create_error_response(msg)
+            return JsonResponse(self.response_data)
+        # Copy layers and tables from line's folder to the workspace
+        copied_data_ok = self.copy_data_2_gpkg()
+        if not copied_data_ok:
+            msg = "No s'han pogut copiar capes o taules. Veure log per mes info"
+            self.create_error_response(msg)
+            return JsonResponse(self.response_data)
+        # Set the layers geodataframe
         self.set_layers_gdf()
         # Create list with only points that are "Proposta Final"
         self.ppf_list = self.get_ppf_list()
@@ -110,11 +128,14 @@ class CheckQualityLine(View):
         self.check_3termes()
         # Check the relation between the tables and the point layer
         self.check_relation_points_tables()
-        # Fer els controls topològics
-        # TODO
+        # Check the topology in order to avoid topological errors
         self.check_topology()
 
-        return JsonResponse({'data': f'Linia {line_id} checkejada'})
+        # Send response as OK
+        self.response_data['result'] = 'OK'
+        self.response_data['message'] = f'Linia {line_id} checkejada'
+        self.add_response_data()
+        return JsonResponse(self.response_data)
 
     def set_up(self, line_id):
         """
@@ -139,10 +160,9 @@ class CheckQualityLine(View):
         # Message format
         log_format = logging.Formatter("%(levelname)s - %(message)s")
         # Log filename and path
-        log_name = f"ReportCQ_{self.line_id_txt}_{self.current_date}.txt"
-        # log_path = os.path.join(LINES_DIR, str(self.line_id), WORK_REC_DIR, log_name)
-        log_path = os.path.join(LOG_DIR, log_name)
-        file_handler = logging.FileHandler(filename=log_path, mode='w')
+        log_name = f"QA-Report_{self.line_id_txt}_{self.current_date}.txt"
+        self.log_path = os.path.join(LOG_DIR, log_name)
+        file_handler = logging.FileHandler(filename=self.log_path, mode='w')
         file_handler.setFormatter(log_format)
         self.logger.addHandler(file_handler)
 
@@ -161,10 +181,10 @@ class CheckQualityLine(View):
                         tree_valid = False
                         self.logger.error(f'No existeix el subdirectori {sub_dir}')
             else:
-                self.logger.error('No existeix DocDelim dins el directori de la línia')
+                self.logger.error('No existeix DocDelim dins el directori de la linia')
                 tree_valid = False
         else:
-            self.logger.error('No existeix la línia al directori de càrrega')
+            self.logger.error('No existeix la linia al directori de càrrega')
             tree_valid = False
 
         if tree_valid:
@@ -179,10 +199,7 @@ class CheckQualityLine(View):
         self.photo_folder = os.path.join(self.doc_delim, 'Fotografies')
 
     def set_layers_gdf(self):
-        """
-        Open all the necessary layers as geodataframes with geopandas
-        :return:
-        """
+        """Open all the necessary layers as geodataframes with geopandas"""
         # SIDM2
         self.lin_tram_ppta_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Lin_Tram_Proposta_SIDM2')
         self.fita_g_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Fita_G_SIDM2')
@@ -196,7 +213,7 @@ class CheckQualityLine(View):
     def line_id_2_txt(self):
         """
         Convert line id (integer) to string nnnn
-        :return: line_id_txt -> <string> ID de la línia introduit en format text
+        :return: line_id_txt -> <string> ID de la linia introduit en format text
         """
         line_id_str = str(self.line_id)
         if len(line_id_str) == 1:
@@ -213,15 +230,15 @@ class CheckQualityLine(View):
     def check_entities_exist(self):
         """
         Check if all the necessary shapefiles and tables exists
-        :return:
+        :return: entities_exist - Boolean that means if all the entities exists in the source workspace
         """
         entities_exist = False
         for shape in SHAPES_LIST:
             shape_path = os.path.join(self.carto_folder, shape)
             if path.exists(shape_path):
-                shapes_exist = True
+                entities_exist = True
             else:
-                shapes_exist = False
+                entities_exist = False
 
         for dbf in TABLE_LIST:
             dbf_path = os.path.join(self.tables_folder, dbf)
@@ -245,7 +262,7 @@ class CheckQualityLine(View):
                 shape_gdf.to_file(WORK_GPKG, layer=shape_name, driver="GPKG")
             except:
                 self.logger.error(f"No s'ha pogut copiar la capa {shape_name}")
-                return
+                return False
 
         for dbf in TABLE_LIST:
             dbf_name = dbf.split('.')[0]
@@ -255,14 +272,13 @@ class CheckQualityLine(View):
                 dbf_gdf.to_file(WORK_GPKG, layer=dbf_name, driver="GPKG")
             except:
                 self.logger.error(f"No s'ha pogut copiar la taula {dbf_name}")
-                return
+                return False
 
-        self.logger.info(f"Capes i taules de la línia {self.line_id} copiades correctament a CQline.gpkg")
+        self.logger.info(f"Capes i taules de la linia {self.line_id} copiades correctament a CQline.gpkg")
+        return True
 
     def check_line_id_exists(self):
-        """
-        Check if the line ID already exists into the database, both into Fita_G and Lin_Tram_Proposta
-        """
+        """Check if the line ID already exists into the database, both into Fita_G and Lin_Tram_Proposta"""
         line_id_in_lin_tram = False
         line_id_in_fita_g = False
 
@@ -288,10 +304,7 @@ class CheckQualityLine(View):
             self.logger.info("L'ID Linia no està repetit a SIDM2")
 
     def check_lin_tram_ppta_layer(self):
-        """
-        Check line's layer's field structure and content
-        :return:
-        """
+        """Check line's layer's field structure and content"""
         self.check_fields_lin_tram_ppta()
         self.check_fields_content_lint_tram_ppta()
 
@@ -324,7 +337,7 @@ class CheckQualityLine(View):
         tram_not_line_id = self.lin_tram_ppta_line_gdf[not_line_id]
         if not tram_not_line_id.empty:
             line_id_error = True
-            self.logger.error("Existeixen trams de línia amb l'ID_LINIA d'una altra línia")
+            self.logger.error("Existeixen trams de linia amb l'ID_LINIA d'una altra linia")
 
         # Check that the fita ID is correct
         id_fita_error = False
@@ -337,7 +350,7 @@ class CheckQualityLine(View):
 
         if not tram_id_f1_bad.empty or not tram_id_f2_bad.empty:
             id_fita_error = True
-            self.logger.error("El camp ID_FITA d'algun dels trams de la línia no és vàlid")
+            self.logger.error("El camp ID_FITA d'algun dels trams de la linia no és vàlid")
 
         if not line_id_error and not id_fita_error:
             self.logger.info("Els camps de Lin_TramPpta estan correctament emplenats")
@@ -356,7 +369,7 @@ class CheckQualityLine(View):
     def get_founded_points_dict(self):
         """
         Get a dict of the founded PPF points with etiqueta as key and ID_PUNT as value
-        :return:
+        :return: points_founded_dict - Dict of the founded points with the key, value -> Etiqueta, ID_Punt
         """
         points_founded_dict = {}
         founded = self.punt_fit_df['TROBADA'] == '1'
@@ -370,9 +383,7 @@ class CheckQualityLine(View):
         return points_founded_dict
 
     def check_layers_geometry(self):
-        """
-        Check the geometry of both line and points
-        """
+        """Check the geometry of both line and points"""
         self.logger.info('Comprovació de les geometries')
         self.logger.info('Lin_Tram_Proposta :')
         self.check_lin_tram_geometry()
@@ -430,16 +441,13 @@ class CheckQualityLine(View):
 
     def info_vertexs_line(self):
         """Get info and make a recount of the line's vertexs"""
-        self.logger.info('Vèrtexs de la línia:')
-        self.logger.info('+---------+-----------+')
-        self.logger.info('| Tram ID | Nº vèrtex |')
-        self.logger.info('+---------+-----------+')
+        self.logger.info('Vèrtexs de la linia:')
+        self.logger.info('      Tram ID   |   Nº vèrtex')
 
         for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
             tram_id = feature['ID']
             tram_vertexs = len(feature['geometry'].coords)   # Nº of vertexs that compose the tram
-            self.logger.info(f"|    {tram_id}   |     {tram_vertexs}     |")
-            self.logger.info('+---------+-----------+')
+            self.logger.info(f"        {tram_id}      |      {tram_vertexs}     ")
 
     def check_points_decimals(self):
         """Check if the points's decimals are correct and are rounded to 1 decimal"""
@@ -498,7 +506,10 @@ class CheckQualityLine(View):
         self.logger.info(f'      Fites no finals: {n_not_final_points}')
 
     def check_ordpf(self):
-        """Check the field ORDPF is not NULL"""
+        """
+        Check the field ORDPF is not NULL
+        :return valid - Boolean that means if the ORDPF field is OK
+        """
         valid = True
         ordpf_null = self.p_proposta_df['ORDPF'].isnull()
         points_ordpf_null = self.p_proposta_df[ordpf_null]
@@ -674,7 +685,7 @@ class CheckQualityLine(View):
                 tram_id = feature['ID']
                 self.logger.error(f"      El tram {tram_id} s'intersecta o toca a sí mateix")
         else:
-            self.logger.info("      Els trams de la línia no s'intersecten o toquen a sí mateixos")
+            self.logger.info("      Els trams de la linia no s'intersecten o toquen a sí mateixos")
 
     def check_line_intersects_db(self):
         """Check that the line doesn't intersects or crosses the database lines"""
@@ -684,7 +695,7 @@ class CheckQualityLine(View):
             for index, feature in features_intersects_db.iterrows():
                 self.logger.error(f"      El tram {feature['ID']} talla algun tram de la base de dades")
         else:
-            self.logger.info('      Els trams de la línia no intersecten cap tram de la base de dades')
+            self.logger.info('      Els trams de la linia no intersecten cap tram de la base de dades')
 
     def check_line_overlaps_db(self):
         """Check that the line doesn't overlaps the database lines"""
@@ -694,7 +705,7 @@ class CheckQualityLine(View):
             for index, feature in features_overlaps_db.iterrows():
                 self.logger.error(f"      El tram {feature['ID']} es sobreposa a algun tram de la base de dades")
         else:
-            self.logger.info('      Els trams de la línia no es sobreposen a cap tram de la base de dades')
+            self.logger.info('      Els trams de la linia no es sobreposen a cap tram de la base de dades')
 
     def check_endpoint_covered_point(self):
         """Check that the coordinates of the lines endpoints are equal to any point"""
@@ -713,7 +724,7 @@ class CheckQualityLine(View):
                 self.logger.error(f'      Algun dels punts finals del tram {tram_id} no coincideix amb una fita de la capa Punt')
 
         if endpoint_covered:
-            self.logger.info('      Tots els punts finals dels trams de la línia coincideixen amb una fita de la capa Punt')
+            self.logger.info('      Tots els punts finals dels trams de la linia coincideixen amb una fita de la capa Punt')
 
     def get_round_point_coordinates(self):
         """
@@ -745,9 +756,9 @@ class CheckQualityLine(View):
                 aux = point['AUX'].values[0]
                 n_fita = point['ID_FITA'].values[0]
                 if aux == 1:
-                    self.logger.info(f'      La F-{n_fita} no està a sobre de la línia i és auxiliar')
+                    self.logger.info(f'      La F-{n_fita} no està a sobre de la linia i és auxiliar')
                 else:
-                    self.logger.error(f'      La F-{n_fita} no està a sobre de la línia i NO és auxiliar')
+                    self.logger.error(f'      La F-{n_fita} no està a sobre de la linia i NO és auxiliar')
 
     def get_round_line_coordinates(self):
         """
@@ -765,30 +776,45 @@ class CheckQualityLine(View):
         return line_coords_list
 
     def write_first_report(self):
-        """
-        Write first log's report
-        """
+        """Write first log's report"""
         init_log_report = "ID Linia = {}:  Data i hora CQ: {}".format(self.line_id_txt, self.current_date)
         self.logger.info(init_log_report)
 
     def rm_temp(self):
-        """
-        Remove temporal files from the workspace
-        :return:
-        """
+        """Remove temporal files from the workspace"""
         gpkg = gdal.OpenEx(WORK_GPKG, gdal.OF_UPDATE, allowed_drivers=['GPKG'])
         for layer in TEMP_ENTITIES:
             layer_name = layer.split('.')[0]
             try:
                 gpkg.ExecuteSQL(f'DROP TABLE {layer_name}')
             except:
-                self.logger.error("Error esborrant arxius temporals")
-                return
+                return False
 
         self.logger.info('Arxius temporals esborrats')
+        return True
+
+    def create_error_response(self, message):
+        """Create a error JSON for the response data"""
+        self.logger.error(message)
+        self.response_data['result'] = 'error'
+        self.response_data['message'] = message
+
+    def add_response_data(self):
+        """Add the log's reports to the JSON response data"""
+        report_list = []
+        with open(self.log_path, 'r') as f:
+            reports = f.read().splitlines()   # Avoid reading with newline character
+            for report in reports:
+                report_level, report_info = report.split('-')[0], report.split('-')[1]
+                item = {
+                    'level': report_level,
+                    'message': report_info
+                }
+                report_list.append(item)
+        self.response_data['reports'] = report_list
 
 
 def open_qgis(request):
     """Open project qgs"""
     os.startfile(QGS_PATH)
-    return JsonResponse({'data': 'QGIS obert correctament'})
+    return JsonResponse({'message': 'QGIS obert correctament'})
