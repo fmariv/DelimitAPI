@@ -2,3 +2,9 @@
 CQline/config.py
 # CQline db
 CQline/db/*
+# Doc generator db
+doc_generator/db/*
+# DelimitAPI db
+db/*
+# Doc generator config.py
+doc_generator/config.py

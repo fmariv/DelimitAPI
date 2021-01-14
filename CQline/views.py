@@ -9,6 +9,7 @@
 # ----------------------------------------------------------
 
 # TODO comprovar amb capes que tinguin errors
+# TODO encapsular millor el control d'errors a la funcio get, intentar retornar més informació
 
 """
 Quality check of a line ready to upload to the database
@@ -19,7 +20,6 @@ import os
 import os.path as path
 from datetime import datetime
 import logging
-import json
 
 # Third party imports
 import geopandas as gpd
@@ -50,8 +50,8 @@ class CheckQualityLine(View):
     tables_folder = None
     photo_folder = None
     # Geodataframes for data managing
-    lin_tram_ppta_sidm2_gdf = None
-    fita_g_sidm2_gdf = None
+    tram_line_mem_gdf = None
+    fita_mem_gdf = None
     lin_tram_ppta_line_gdf = None
     punt_line_gdf = None
     p_proposta_df = None
@@ -79,9 +79,10 @@ class CheckQualityLine(View):
             self.create_error_response(msg)
             return JsonResponse(self.response_data)   # Send response as error
         # Remove temp files from the workspace
-        rem_temp_ok = self.rm_temp()
-        if not rem_temp_ok:
-            msg = 'Error esborrant arxius temporals'
+        try:
+            self.rm_temp()
+        except Exception as e:
+            msg = f'Error esborrant arxius temporals => {e}'
             self.create_error_response(msg)
             return JsonResponse(self.response_data)
         # Check if all the necessary entities exist
@@ -201,8 +202,8 @@ class CheckQualityLine(View):
     def set_layers_gdf(self):
         """Open all the necessary layers as geodataframes with geopandas"""
         # SIDM2
-        self.lin_tram_ppta_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Lin_Tram_Proposta_SIDM2')
-        self.fita_g_sidm2_gdf = gpd.read_file(WORK_GPKG, layer='Fita_G_SIDM2')
+        self.tram_line_mem_gdf = gpd.read_file(WORK_GPKG, layer='tram_linia_mem')
+        self.fita_mem_gdf = gpd.read_file(WORK_GPKG, layer='fita_mem')
         # Line
         self.lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
         self.punt_line_gdf = gpd.read_file(WORK_GPKG, layer='Punt')
@@ -283,14 +284,14 @@ class CheckQualityLine(View):
         line_id_in_fita_g = False
 
         # Check into LIN_TRAM_PROPOSTA_SIDM2
-        tram_duplicated_id = self.lin_tram_ppta_sidm2_gdf['ID_LINIA'] == self.line_id
-        tram_line_id = self.lin_tram_ppta_sidm2_gdf[tram_duplicated_id]
+        tram_duplicated_id = self.tram_line_mem_gdf['ID_LINIA'] == self.line_id
+        tram_line_id = self.tram_line_mem_gdf[tram_duplicated_id]
         if not tram_line_id.empty:
             line_id_in_lin_tram = True
 
         # Check into FITA_G_SIDM2
-        fita_g_duplicated_id = self.fita_g_sidm2_gdf['ID_LINIA'] == self.line_id
-        fita_g_line_id = self.fita_g_sidm2_gdf[fita_g_duplicated_id]
+        fita_g_duplicated_id = self.fita_mem_gdf['ID_LINIA'] == self.line_id
+        fita_g_line_id = self.fita_mem_gdf[fita_g_duplicated_id]
         if not fita_g_line_id.empty:
             line_id_in_fita_g = True
 
@@ -689,7 +690,7 @@ class CheckQualityLine(View):
 
     def check_line_intersects_db(self):
         """Check that the line doesn't intersects or crosses the database lines"""
-        intersects_db = self.lin_tram_ppta_line_gdf.intersects(self.lin_tram_ppta_sidm2_gdf)
+        intersects_db = self.lin_tram_ppta_line_gdf.intersects(self.tram_line_mem_gdf)
         features_intersects_db = self.lin_tram_ppta_line_gdf[intersects_db]
         if not features_intersects_db.empty:
             for index, feature in features_intersects_db.iterrows():
@@ -699,7 +700,7 @@ class CheckQualityLine(View):
 
     def check_line_overlaps_db(self):
         """Check that the line doesn't overlaps the database lines"""
-        overlaps_db = self.lin_tram_ppta_line_gdf.overlaps(self.lin_tram_ppta_sidm2_gdf)
+        overlaps_db = self.lin_tram_ppta_line_gdf.overlaps(self.tram_line_mem_gdf)
         features_overlaps_db = self.lin_tram_ppta_line_gdf[overlaps_db]
         if not features_overlaps_db.empty:
             for index, feature in features_overlaps_db.iterrows():
@@ -777,7 +778,7 @@ class CheckQualityLine(View):
 
     def write_first_report(self):
         """Write first log's report"""
-        init_log_report = "ID Linia = {}:  Data i hora CQ: {}".format(self.line_id_txt, self.current_date)
+        init_log_report = f"ID Linia = {self.line_id_txt}:  Data i hora CQ: {self.current_date}"
         self.logger.info(init_log_report)
 
     def rm_temp(self):
@@ -785,13 +786,9 @@ class CheckQualityLine(View):
         gpkg = gdal.OpenEx(WORK_GPKG, gdal.OF_UPDATE, allowed_drivers=['GPKG'])
         for layer in TEMP_ENTITIES:
             layer_name = layer.split('.')[0]
-            try:
-                gpkg.ExecuteSQL(f'DROP TABLE {layer_name}')
-            except:
-                return False
+            gpkg.ExecuteSQL(f'DROP TABLE {layer_name}')
 
         self.logger.info('Arxius temporals esborrats')
-        return True
 
     def create_error_response(self, message):
         """Create a error JSON for the response data"""
