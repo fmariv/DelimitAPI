@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block qa_line_content %}
+
+<body>
+<form action="{% url 'qa-line' %}" method="GET" id="line_form">
+    <label for="line_id">Line ID: </label>
+    <input id="line_id" type="number" name="line_id" value="{{ line_id }}">
+    <input type="submit" value="OK">
+</form>
+<form action="open-qgis/">
+    <input type="submit" value="Open QGIS" />
+</form>
+{% block qa_line_reports %}
+{% endblock %}
+</body>
+
+{% endblock %}

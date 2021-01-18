@@ -1,5 +1,5 @@
-from django.urls import path
-from CQline.views import CheckQualityLine, open_qgis
+from django.urls import re_path
+from CQline.views import CheckQualityLine, open_qgis, render_qa_page
 
 '''
 Class-based views
@@ -8,6 +8,7 @@ Class-based views
 '''
 
 urlpatterns = [
-    path('<int:line_id>/', CheckQualityLine.as_view()),
-    path('open-qgis/', open_qgis)
+    re_path(r'^$', render_qa_page, name='qa-page'),
+    re_path(r'^check/$', CheckQualityLine.as_view(), name='qa-line'),
+    re_path(r'^open-qgis/$', open_qgis)
 ]

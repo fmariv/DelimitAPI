@@ -9,7 +9,6 @@
 # ----------------------------------------------------------
 
 # TODO comprovar amb capes que tinguin errors
-# TODO encapsular millor el control d'errors a la funcio get, intentar retornar més informació
 
 """
 Quality check of a line ready to upload to the database
@@ -24,8 +23,9 @@ import logging
 # Third party imports
 import geopandas as gpd
 from osgeo import gdal
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.views import View
+from django.shortcuts import render
 
 # Local imports
 from CQline.config import *
@@ -62,41 +62,48 @@ class CheckQualityLine(View):
     # Json response
     response_data = {}
 
-    def get(self, request, line_id):
+    def get(self, request):
         """
         Main entry point. Here is where the magic is done. This method is called when someone wants to init the process of quality
         checking and is supposed to prepare the workspace, prepare the line and check it's geometry and attributes
         """
         # SET UP THE WORKING ENVIRONMENT -------------------------
         # Set up parameters
+        line_id = request.GET.get('line_id')
         self.set_up(line_id)
+        # Check that the upload line directory exists
+        line_dir_exists = self.check_line_dir_exists()
+        if not line_dir_exists:
+            msg = f"No existeix la carpeta de la linia {self.line_id} al directori de càrrega"
+            response = self.create_error_response(msg)
+            return render(request, '../templates/qa_reports.html', response)
         # Check and set directories paths
         directory_tree_valid = self.check_directories()
         if directory_tree_valid:
             self.set_directories()
         else:
             msg = "L'estructura de directoris de la carpeta DocDelim de la linia no es correcte"
-            self.create_error_response(msg)
-            return JsonResponse(self.response_data)   # Send response as error
+            response = self.create_error_response(msg)
+            return render(request, '../templates/qa_reports.html', response)
         # Remove temp files from the workspace
         try:
             self.rm_temp()
         except Exception as e:
             msg = f'Error esborrant arxius temporals => {e}'
-            self.create_error_response(msg)
-            return JsonResponse(self.response_data)
+            response = self.create_error_response(msg)
+            return render(request, '../templates/qa_reports.html', response)
         # Check if all the necessary entities exist
         entities_exist = self.check_entities_exist()
         if not entities_exist:
             msg = 'Falten capes o taules necessaries pel proces de QA'
-            self.create_error_response(msg)
-            return JsonResponse(self.response_data)
+            response = self.create_error_response(msg)
+            return render(request, '../templates/qa_reports.html', response)
         # Copy layers and tables from line's folder to the workspace
         copied_data_ok = self.copy_data_2_gpkg()
         if not copied_data_ok:
             msg = "No s'han pogut copiar capes o taules. Veure log per mes info"
-            self.create_error_response(msg)
-            return JsonResponse(self.response_data)
+            response = self.create_error_response(msg)
+            return render(request, '../templates/qa_reports.html', response)
         # Set the layers geodataframe
         self.set_layers_gdf()
         # Create list with only points that are "Proposta Final"
@@ -135,8 +142,8 @@ class CheckQualityLine(View):
         # Send response as OK
         self.response_data['result'] = 'OK'
         self.response_data['message'] = f'Linia {line_id} checkejada'
-        self.add_response_data()
-        return JsonResponse(self.response_data)
+        response = self.add_response_data()
+        return render(request, '../templates/qa_reports.html', response)
 
     def set_up(self, line_id):
         """
@@ -162,36 +169,43 @@ class CheckQualityLine(View):
         log_format = logging.Formatter("%(levelname)s - %(message)s")
         # Log filename and path
         log_name = f"QA-Report_{self.line_id_txt}_{self.current_date}.txt"
-        self.log_path = os.path.join(LOG_DIR, log_name)
+        self.log_path = path.join(LOG_DIR, log_name)
+        if path.exists(self.log_path):   # If a log with the same filename exists, removes it
+            os.remove(self.log_path)
         file_handler = logging.FileHandler(filename=self.log_path, mode='w')
         file_handler.setFormatter(log_format)
         self.logger.addHandler(file_handler)
+
+    def check_line_dir_exists(self):
+        """
+
+        :return:
+        """
+        line_folder = os.path.join(UPLOAD_DIR, str(self.line_id))
+        if path.exists(line_folder):
+            self.line_folder = line_folder
+            return True
+        else:
+            return False
 
     def check_directories(self):
         """Check if the directory tree structure and content is correct"""
         tree_valid = True
 
-        line_folder = os.path.join(UPLOAD_DIR, str(self.line_id))
-        if path.exists(line_folder):  # Check if the line folder exists at the loading folder
-            self.line_folder = line_folder
-            doc_delim = os.path.join(self.line_folder, 'DocDelim')
-            if path.exists(doc_delim):  # Check the DocDelim folder exists
-                self.doc_delim = doc_delim
-                for sub_dir in SUB_DIR_LIST:  # Check if all the subdirs exist
-                    if sub_dir not in os.listdir(self.doc_delim):
-                        tree_valid = False
-                        self.logger.error(f'No existeix el subdirectori {sub_dir}')
-            else:
-                self.logger.error('No existeix DocDelim dins el directori de la linia')
-                tree_valid = False
+        doc_delim = os.path.join(self.line_folder, 'DocDelim')
+        if path.exists(doc_delim):  # Check the DocDelim folder exists
+            self.doc_delim = doc_delim
+            for sub_dir in SUB_DIR_LIST:  # Check if all the subdirs exist
+                if sub_dir not in os.listdir(self.doc_delim):
+                    tree_valid = False
+                    self.logger.error(f'No existeix el subdirectori {sub_dir}')
         else:
-            self.logger.error('No existeix la linia al directori de càrrega')
+            self.logger.error('No existeix DocDelim dins el directori de la linia')
             tree_valid = False
 
         if tree_valid:
             self.logger.info('Estructura de directoris OK')
-
-        return tree_valid
+            return tree_valid
 
     def set_directories(self):
         """Set paths to directories"""
@@ -284,13 +298,13 @@ class CheckQualityLine(View):
         line_id_in_fita_g = False
 
         # Check into LIN_TRAM_PROPOSTA_SIDM2
-        tram_duplicated_id = self.tram_line_mem_gdf['ID_LINIA'] == self.line_id
+        tram_duplicated_id = self.tram_line_mem_gdf['id_linia'] == self.line_id
         tram_line_id = self.tram_line_mem_gdf[tram_duplicated_id]
         if not tram_line_id.empty:
             line_id_in_lin_tram = True
 
         # Check into FITA_G_SIDM2
-        fita_g_duplicated_id = self.fita_mem_gdf['ID_LINIA'] == self.line_id
+        fita_g_duplicated_id = self.fita_mem_gdf['id_linia'] == self.line_id
         fita_g_line_id = self.fita_mem_gdf[fita_g_duplicated_id]
         if not fita_g_line_id.empty:
             line_id_in_fita_g = True
@@ -796,6 +810,8 @@ class CheckQualityLine(View):
         self.response_data['result'] = 'error'
         self.response_data['message'] = message
 
+        return {'response': self.response_data}
+
     def add_response_data(self):
         """Add the log's reports to the JSON response data"""
         report_list = []
@@ -810,8 +826,19 @@ class CheckQualityLine(View):
                 report_list.append(item)
         self.response_data['reports'] = report_list
 
+        return {'response': self.response_data}
+
 
 def open_qgis(request):
     """Open project qgs"""
     os.startfile(QGS_PATH)
     return JsonResponse({'message': 'QGIS obert correctament'})
+
+
+def render_qa_page(request):
+    """
+
+    :param request:
+    :return:
+    """
+    return render(request, '../templates/qa_page.html')

@@ -14,10 +14,12 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import re_path, include
+import DelimitAPI.views
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('QA-line/', include('CQline.urls')),
-    path('municat/', include('municat_generator.urls'))
+    re_path(r'^$', DelimitAPI.views.index, name='index'),
+    re_path(r'^admin/', admin.site.urls),
+    re_path(r'^qa-line/', include('CQline.urls')),
+    re_path(r'^municat/', include('municat_generator.urls'))
 ]

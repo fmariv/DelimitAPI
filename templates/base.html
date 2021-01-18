@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Eines de Delimitació territorial</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <header>
+	<img id = "logo" src="{% static 'img/logo_icgc_blanc.png' %}" width="220" height="80"/>
+	<h1 id="titol">Eines de Delimitació territorial</h1>
+	</header>
+    <a href = "{% url 'index' %}">Inici</a>
+    <div class="content-container">
+        {% block nav_content %}
+        {% endblock %}
+
+        {% block qa_line_content %}
+        {% endblock %}
+    </div>
+</body>
+<script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+{% block javascript %}{% endblock %}
+</html>
