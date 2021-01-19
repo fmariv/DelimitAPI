@@ -8,5 +8,5 @@ Class-based views
 '''
 
 urlpatterns = [
-    path('', MunicatDataGenerator.as_view())
+    path('', MunicatDataGenerator.as_view(), name='municat')
 ]

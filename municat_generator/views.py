@@ -24,7 +24,9 @@ import logging
 import geopandas as gpd
 from osgeo import gdal
 from django.http import JsonResponse
+from django.shortcuts import render, redirect
 from django.views import View
+from django.contrib import messages
 
 # Local imports
 from municat_generator.config import *
@@ -123,19 +125,18 @@ class MunicatDataGenerator(View):
                 self.export_data()
                 # Copy PDF to the output folder
                 self.copy_pdf()
-                # Remove temp files
-                try:
-                    self.rm_temp()
-                except Exception as e:
-                    msg = f'Error esborrant arxius temporals => {e}'
-                    self.create_error_response(msg)
 
                 self.logger.info(f'Carpeta municat de la línia {line_id} generada correctament')
 
         # Send response as OK
         self.response_data['result'] = 'OK'
         self.response_data['message'] = f'Carpetes generades correctament'
-        return JsonResponse(self.response_data)
+        if self.response_data['result'] == 'OK':
+            messages.success(request, 'Carpetes generades correctament!')
+            return redirect("index")
+        else:
+            messages.warning(request, "No s'han generat les carpetes")
+        return render(request, '../templates/index.html')
 
     def set_up(self):
         """

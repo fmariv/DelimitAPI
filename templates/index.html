@@ -3,12 +3,13 @@
 {% block nav_content %}
 
 <body>
-<form action="qa-line/">
+<form action="{% url 'qa-page' %}">
     <input type="submit" value="Go to QA page" />
 </form>
-<form action="municat/">
+<form action="{% url 'municat' %}">
     <input type="submit" value="Municat" />
 </form>
+{% include 'messages.html' %}
 </body>
 
 {% endblock %}

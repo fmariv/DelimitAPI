@@ -25,7 +25,8 @@ import geopandas as gpd
 from osgeo import gdal
 from django.http import JsonResponse
 from django.views import View
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib import messages
 
 # Local imports
 from CQline.config import *
@@ -809,6 +810,7 @@ class CheckQualityLine(View):
         self.logger.error(message)
         self.response_data['result'] = 'error'
         self.response_data['message'] = message
+        logging.shutdown()
 
         return {'response': self.response_data}
 
@@ -821,10 +823,11 @@ class CheckQualityLine(View):
                 report_level, report_info = report.split('-')[0], report.split('-')[1]
                 item = {
                     'level': report_level,
-                    'message': report_info
+                    'report_message': report_info
                 }
                 report_list.append(item)
         self.response_data['reports'] = report_list
+        logging.shutdown()
 
         return {'response': self.response_data}
 
@@ -832,7 +835,8 @@ class CheckQualityLine(View):
 def open_qgis(request):
     """Open project qgs"""
     os.startfile(QGS_PATH)
-    return JsonResponse({'message': 'QGIS obert correctament'})
+    messages.info(request, "S'està obrint el projecte de QGIS")
+    return redirect('qa-page')
 
 
 def render_qa_page(request):
