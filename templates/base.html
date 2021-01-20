@@ -9,15 +9,20 @@
     {% block css %}{% endblock %}
 </head>
 <body>
-    <header>
-	</header>
-    <a href = "{% url 'index' %}">Inici</a>
+    <div class="header">
+	    <a href="{% url 'index' %}"><img id="logo" src="{% static 'img/logo_icgc.jpg' %}" width="220" height="80"/></a>
+	</div>
     <div class="content-container">
-        {% block nav_content %}
-        {% endblock %}
-
+        <div class="title-container">
+            {% block title_content %}
+            {% endblock %}
+        </div>
         {% block qa_line_content %}
         {% endblock %}
+        <div class="wrap-container">
+            {% block nav_content %}
+            {% endblock %}
+        </div>
     </div>
 </body>
 <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>

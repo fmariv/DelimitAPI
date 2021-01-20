@@ -1,19 +1,30 @@
 {% extends "base.html" %}
 
-{% block qa_line_content %}
-
-<body>
-<form action="{% url 'qa-line' %}" method="GET" id="line_form">
-    <label for="line_id">Line ID: </label>
-    <input id="line_id" type="number" name="line_id" value="{{ line_id }}">
-    <input type="submit" value="OK">
-</form>
-<form action="open-qgis/">
-    <input type="submit" value="Open QGIS" />
-</form>
-{% include 'messages.html' %}
-{% block qa_line_reports %}
+{% block title_content %}
+<h5 id="title">Control de qualitat d'una línia</h5>
+<pre id="sub-title">
+    Procés que comprova la qualitat i veracitat dels trams i fites d'una línia de terme,
+    prèvia càrrega a la base de dades.
+</pre>
 {% endblock %}
-</body>
 
+{% block qa_line_content %}
+<div class="qa-line-container">
+    <form class="form-inline" action="{% url 'qa-line' %}" method="GET" id="line_form">
+      <input type="number" class="form-control mb-2 mr-sm-2" id="line_id" placeholder="ID línia" name="line_id" value="{{ line_id }}">
+      <button type="submit" class="btn btn-primary mb-2">Check</button>
+    </form>
+    <form action="open-qgis/">
+        <button type="submit" class="btn btn-primary mb-2">Obrir projecte QGIS</button>
+    </form>
+</div>
+<div class="alert-messages">
+    {% include 'messages.html' %}
+</div>
+<div class="report-wrap-container">
+    <div class="wrap">
+        {% block qa_line_reports %}
+        {% endblock %}
+    </div>
+</div>
 {% endblock %}

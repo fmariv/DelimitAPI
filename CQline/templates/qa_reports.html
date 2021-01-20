@@ -3,14 +3,14 @@
 
 {% block qa_line_reports %}
     {% if response.result == "error" %}
-        <p id="error-message"> {{ response.message }} </p>
+        <p class="error-message"> {{ response.message }} </p>
 
     {% elif response.result == "OK" %}
         {% for report in response.reports %}
             {% if report.level == "ERROR " %}
-                <p id="error-message"> {{ report.report_message }} </p>
+                <p class="error-message"> {{ report.report_message }} </p>
             {% else %}
-                <p> {{ report.report_message }} </p>
+                <p class="message"> {{ report.report_message }} </p>
             {% endif %}
         {% endfor %}
     {% endif %}

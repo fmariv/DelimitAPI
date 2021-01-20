@@ -127,7 +127,6 @@ class MunicatDataGenerator(View):
                 self.copy_pdf()
 
                 self.logger.info(f'Carpeta municat de la línia {line_id} generada correctament')
-
         # Send response as OK
         self.response_data['result'] = 'OK'
         self.response_data['message'] = f'Carpetes generades correctament'
@@ -136,7 +135,7 @@ class MunicatDataGenerator(View):
             return redirect("index")
         else:
             messages.warning(request, "No s'han generat les carpetes")
-        return render(request, '../templates/index.html')
+        return redirect("index")
 
     def set_up(self):
         """
