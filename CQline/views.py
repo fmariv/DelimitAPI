@@ -71,6 +71,10 @@ class CheckQualityLine(View):
         # SET UP THE WORKING ENVIRONMENT -------------------------
         # Set up parameters
         line_id = request.GET.get('line_id')
+        if not line_id:
+            msg = "No s'ha introduït cap ID Linia"
+            response = self.create_error_response(msg)
+            return render(request, '../templates/qa_reports.html', response)
         self.set_up(line_id)
         # Check that the upload line directory exists
         line_dir_exists = self.check_line_dir_exists()

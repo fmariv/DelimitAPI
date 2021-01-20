@@ -10,7 +10,11 @@
 </head>
 <body>
     <div class="header">
-	    <a href="{% url 'index' %}"><img id="logo" src="{% static 'img/logo_icgc.jpg' %}" width="220" height="80"/></a>
+	    <a href="{% url 'index' %}"><img class="logo" src="{% static 'img/logo_icgc.jpg' %}" width="220" height="80"/></a>
+        <div class="title-logo-udt">
+            <p class="udt-title">Unitat de Delimitació territorial</p>
+            <img class="logo-udt" src="{% static 'img/logo_udt.jpg' %}" width="50" height="50"/>
+        </div>
 	</div>
     <div class="content-container">
         <div class="title-container">
