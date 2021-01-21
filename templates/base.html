@@ -17,16 +17,12 @@
         </div>
 	</div>
     <div class="content-container">
-        <div class="title-container">
-            {% block title_content %}
-            {% endblock %}
-        </div>
+        {% block title_content %}
+        {% endblock %}
         {% block qa_line_content %}
         {% endblock %}
-        <div class="wrap-container">
-            {% block nav_content %}
-            {% endblock %}
-        </div>
+        {% block apps_content %}
+        {% endblock %}
     </div>
 </body>
 <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>

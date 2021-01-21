@@ -1,10 +1,8 @@
 {% extends "qa_page.html" %}
 
-
 {% block qa_line_reports %}
     {% if response.result == "error" %}
         <p class="error-message"> {{ response.message }} </p>
-
     {% elif response.result == "OK" %}
         {% for report in response.reports %}
             {% if report.level == "ERROR " %}

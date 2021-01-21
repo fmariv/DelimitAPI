@@ -14,15 +14,17 @@
 </div>
 {% endblock %}
 
-{% block nav_content %}
-<div class="wrap">
-    <a href="{% url 'qa-page' %}"><img id="line-img" src="{% static 'img/line.png' %}"/></a>
-    <p class="app-title">Control de qualitat d'una línia</p>
-    <p class="app-description">Procés que comprova la qualitat i veracitat dels trams i fites d'una línia de terme, prèvia càrrega a la base de dades.</p>
-</div>
-<div class="wrap">
-    <a href="{% url 'municat' %}"><img id="package-img" src="{% static 'img/package.png' %}"/></a>
-    <p class="app-title">Generador de Municat</p>
-    <p class="app-description">Procés que genera automàticament el paquet de Municat d'una línia de terme, amb la seva MTT i geometries.</p>
+{% block apps_content %}
+<div class="wrap-container">
+    <div class="wrap">
+        <a href="{% url 'qa-page' %}"><img id="line-img" src="{% static 'img/line.png' %}"/></a>
+        <p class="app-title">Control de qualitat d'una línia</p>
+        <p class="app-description">Procés que comprova la qualitat i veracitat dels trams i fites d'una línia de terme, prèvia càrrega a la base de dades.</p>
+    </div>
+    <div class="wrap">
+        <a href="{% url 'municat' %}"><img id="package-img" src="{% static 'img/package.png' %}"/></a>
+        <p class="app-title">Generador de Municat</p>
+        <p class="app-description">Procés que genera automàticament el paquet de Municat d'una línia de terme, amb la seva MTT i geometries.</p>
+    </div>
 </div>
 {% endblock %}

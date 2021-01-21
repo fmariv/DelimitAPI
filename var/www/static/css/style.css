@@ -4,15 +4,6 @@ html {
 body {
     height: 100%;
 }
-.error-message {
-    color: red;
-}
-.logo {
-    position: absolute;
-    left: 10%;
-    top: 2%;
-    bottom: 2%;
-}
 .header {
     background-color: white;
     width: 100%;
@@ -30,17 +21,22 @@ body {
 .udt-title {
     font-style: italic;
 }
-.content-container{
-    height: 85%;
-    background: linear-gradient(#7F7F7F 50%, #F7F7F7 50%);
-    overflow: hidden;
+.logo {
+    position: absolute;
+    left: 10%;
+    top: 2%;
+    bottom: 2%;
 }
-
 .title-container, .qa-line-container {
     position: relative;
     z-index: 2;
     padding-top: 2.2%;
     text-align: center;
+}
+.content-container{
+    height: 85%;
+    background: linear-gradient(#7F7F7F 50%, #F7F7F7 50%);
+    overflow: hidden;
 }
 #title, #qa-line-label {
     font-weight: bold;
@@ -53,23 +49,28 @@ body {
     font-weight: bold;
     margin-top: 20px;
 }
+.qa-line-container {
+    display: flex;
+    gap: 15px;
+    margin-top: -25px;
+    justify-content: center;
+}
 .app-description {
     padding-left: 25px;
     padding-right: 25px;
-}
-
-.wrap-container, .report-wrap-container {
-    height: 78%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 5%;
 }
 .wrap-container {
     margin-top: -50px;
 }
 .report-wrap-container {
     margin-top: -30px;
+}
+.wrap-container, .report-wrap-container {
+    height: 78%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5%;
 }
 .wrap {
      border: 1px solid grey;
@@ -85,6 +86,9 @@ body {
     width: 40%;
     height: 80%;
     overflow: auto;
+}
+.error-message {
+    color: red;
 }
 .message, .error-message {
     margin-left: 5%;
@@ -112,12 +116,6 @@ body {
     z-index: 10;
     width: 100%;
     text-align: center;
-}
-.qa-line-container {
-    display: flex;
-    gap: 15px;
-    margin-top: -25px;
-    justify-content: center;
 }
 .btn {
     background-color: #535353 !important;
