@@ -1,10 +1,10 @@
 # DelimitAPI db
-db/*
-# Doc generator db
-doc_generator/db/*
+db/
 # qa line config.py
 qa_line/config.py
 # doc generator config.py
 doc_generator/config.py
 # municat generator config.py
 municat_generator/config.py
+# .env
+.env
