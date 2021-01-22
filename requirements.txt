@@ -18,6 +18,7 @@ pep8==1.7.1
 pyflakes==2.2.0
 pyproj @ file:///D:/bld/pyproj_1602663657035/work
 python-dateutil==2.8.1
+python-dotenv==0.15.0
 pytz==2020.1
 Rtree==0.9.4
 Shapely==1.7.1

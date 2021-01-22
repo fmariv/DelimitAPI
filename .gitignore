@@ -1,5 +1,7 @@
 # DelimitAPI db
 db/
+# Reports
+reports/
 # qa line config.py
 qa_line/config.py
 # doc generator config.py
