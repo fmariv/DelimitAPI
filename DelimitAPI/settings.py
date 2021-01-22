@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_jenkins',
     'qa_line',
     'doc_generator'
 ]
@@ -140,3 +141,8 @@ STATICFILES_DIRS = [
     BASE_DIR / "static/",
     BASE_DIR / 'var/www/static/'
 ]
+
+JENKINS_TASKS = (
+    'django_jenkins.tasks.run_pep8',
+    'django_jenkins.tasks.run_pyflakes'
+)
