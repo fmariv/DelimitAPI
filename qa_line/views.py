@@ -547,8 +547,8 @@ class CheckQualityLine(View):
         # If PPF = 1 and ORDPF = 0 => ESFITA MUST BE 0
         valid = True
         bad_auxiliary_points = self.p_proposta_df.loc[(self.p_proposta_df['PFF'] == 1) &
-                                                       (self.p_proposta_df['ORDPF'] == 0) &
-                                                       (self.p_proposta_df['ESFITA'] != 0)]
+                                                      (self.p_proposta_df['ORDPF'] == 0) &
+                                                      (self.p_proposta_df['ESFITA'] != 0)]
 
         if not bad_auxiliary_points.empty:
             valid = False
@@ -602,8 +602,8 @@ class CheckQualityLine(View):
     def check_photo_name(self):
         """Check that the photography in the layer has the same name as de .JPG file"""
         # Get a list with the photographies's filename in the photography folder
-        folder_photos_filenames = [f for f in os.listdir(self.photo_folder) if os.path.isfile(os.path.join(self.photo_folder, f))
-                                   and (f.endswith(".jpg") or f.endswith(".JPG"))]
+        folder_photos_filenames = [f for f in os.listdir(self.photo_folder) if os.path.isfile(os.path.join(self.photo_folder, f)) and
+                                   (f.endswith(".jpg") or f.endswith(".JPG"))]
         # Get a list with the photographies's filename from PPF
         photo_exists = self.punt_line_gdf['FOTOS'].notnull()
         points_with_photo = self.punt_line_gdf[photo_exists]
