@@ -2,4 +2,4 @@ from django.apps import AppConfig
 
 
 class CqlineConfig(AppConfig):
-    name = 'CQline'
+    name = 'qa_line'

@@ -1,5 +1,4 @@
 from django.urls import path
-from CQline.views import CheckQualityLine, open_qgis
 
 '''
 Class-based views

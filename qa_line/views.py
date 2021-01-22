@@ -29,7 +29,7 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 
 # Local imports
-from CQline.config import *
+from qa_line.config import *
 
 
 class CheckQualityLine(View):

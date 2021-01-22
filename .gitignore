@@ -1,10 +1,10 @@
-# CQline config.py
-CQline/config.py
-# CQline db
-CQline/db/*
-# Doc generator db
-doc_generator/db/*
 # DelimitAPI db
 db/*
-# Doc generator config.py
+# Doc generator db
+doc_generator/db/*
+# qa line config.py
+qa_line/config.py
+# doc generator config.py
 doc_generator/config.py
+# municat generator config.py
+municat_generator/config.py
