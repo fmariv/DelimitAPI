@@ -10,3 +10,5 @@ doc_generator/config.py
 municat_generator/config.py
 # .env
 .env
+# staticfiles
+staticfiles/
