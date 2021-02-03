@@ -23,7 +23,6 @@ import logging
 # Third party imports
 import geopandas as gpd
 from osgeo import gdal
-from django.http import JsonResponse
 from django.views import View
 from django.shortcuts import render, redirect
 from django.contrib import messages
