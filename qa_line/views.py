@@ -9,6 +9,7 @@
 # ----------------------------------------------------------
 
 # TODO comprovar amb capes que tinguin errors
+# TODO el camp ID_LINIA de Lin_TramPpta es critic, sense ell pot petar la resta. Pot ser revisar si falta aquest camp
 
 """
 Quality check of a line ready to upload to the database
@@ -71,14 +72,14 @@ class CheckQualityLine(View):
         # Set up parameters
         line_id = request.GET.get('line_id')
         if not line_id:
-            msg = "No s'ha introduït cap ID Linia"
+            msg = "No s'ha introduït cap ID Linia."
             response = self.create_error_response(msg)
             return render(request, '../templates/qa_reports.html', response)
         self.set_up(line_id)
         # Check that the upload line directory exists
         line_dir_exists = self.check_line_dir_exists()
         if not line_dir_exists:
-            msg = f"No existeix la carpeta de la linia {self.line_id} al directori de càrrega"
+            msg = f"No existeix la carpeta de la linia {self.line_id} al directori de càrrega."
             response = self.create_error_response(msg)
             return render(request, '../templates/qa_reports.html', response)
         # Check and set directories paths
@@ -86,7 +87,8 @@ class CheckQualityLine(View):
         if directory_tree_valid:
             self.set_directories()
         else:
-            msg = "L'estructura de directoris de la carpeta DocDelim de la linia no es correcte"
+            msg = "L'estructura de directoris de la carpeta de la linia no és vàlida. Si us plau, revisa" \
+                  " que la carpeta DocDelim existeixi i que tots els seus subdirectoris també."
             response = self.create_error_response(msg)
             return render(request, '../templates/qa_reports.html', response)
         # Remove temp files from the workspace
@@ -99,13 +101,14 @@ class CheckQualityLine(View):
         # Check if all the necessary entities exist
         entities_exist = self.check_entities_exist()
         if not entities_exist:
-            msg = 'Falten capes o taules necessaries pel proces de QA'
+            msg = "Falten capes o taules necessaries pel procés de control de qualitat. Si us plau, revisa que totes les capes i taules" \
+                  " estiguin a les carpetes 'Cartografia' i 'Taules'."
             response = self.create_error_response(msg)
             return render(request, '../templates/qa_reports.html', response)
         # Copy layers and tables from line's folder to the workspace
         copied_data_ok = self.copy_data_2_gpkg()
         if not copied_data_ok:
-            msg = "No s'han pogut copiar capes o taules. Veure log per mes info"
+            msg = "No s'han pogut copiar capes o taules. Veure log per informació més detallada."
             response = self.create_error_response(msg)
             return render(request, '../templates/qa_reports.html', response)
         # Set the layers geodataframe
@@ -123,7 +126,12 @@ class CheckQualityLine(View):
         # Check if the line ID already exists into the database
         self.check_line_id_exists()
         # Check if the line's field structure and content is correct
-        self.check_lin_tram_ppta_layer()
+        lin_tram_ppta_ok = self.check_lin_tram_ppta_layer()
+        if not lin_tram_ppta_ok:
+            msg = "L'estructura de camps de Lin_TramPpta.shp no és correcte i no es pot continuar el procés, donat que hi ha algun" \
+                  " camp que falta o sobra a la capa. Si us plau, revisa-la."
+            response = self.create_error_response(msg)
+            return render(request, '../templates/qa_reports.html', response)
         # Check the line and point's geometry
         self.check_layers_geometry()
         # Get info from the parts and vertexs of every line tram
@@ -251,25 +259,32 @@ class CheckQualityLine(View):
         Check if all the necessary shapefiles and tables exists
         :return: entities_exist - Boolean that means if all the entities exists in the source workspace
         """
-        entities_exist = False
+        shapes_exist, tables_exist = False, False
         for shape in SHAPES_LIST:
             shape_path = os.path.join(self.carto_folder, shape)
             if path.exists(shape_path):
-                entities_exist = True
+                shapes_exist = True
             else:
-                entities_exist = False
+                shapes_exist = False
 
         for dbf in TABLE_LIST:
             dbf_path = os.path.join(self.tables_folder, dbf)
             if path.exists(dbf_path):
-                entities_exist = True
+                tables_exist = True
             else:
-                entities_exist = False
+                tables_exist = False
 
-        if not entities_exist:
-            self.logger.error('No existeixen les capes i taules necessaries a DocDelim')
-
-        return entities_exist
+        if not shapes_exist and not tables_exist:
+            self.logger.error('Falten capes i taules necessàries a les carpetes de Cartografia i Taules')
+            return False
+        elif not shapes_exist and tables_exist:
+            self.logger.error('Falten capes necessàries a la carpeta de Cartografia')
+            return False
+        elif shapes_exist and not tables_exist:
+            self.logger.error('Falten taules necessàries a la carpeta de Taules')
+            return False
+        else:
+            return True
 
     def copy_data_2_gpkg(self):
         """Copy all the feature classes and tables from the line's folder to the local work geopackage"""
@@ -277,7 +292,7 @@ class CheckQualityLine(View):
             shape_name = shape.split('.')[0]
             shape_path = os.path.join(self.carto_folder, shape)
             try:
-                shape_gdf = gpd.read_file(shape_path)
+                shape_gdf = gpd.read_file(shape_path).set_crs(epsg=25831)
                 shape_gdf.to_file(WORK_GPKG, layer=shape_name, driver="GPKG")
             except:
                 self.logger.error(f"No s'ha pogut copiar la capa {shape_name}")
@@ -297,20 +312,20 @@ class CheckQualityLine(View):
         return True
 
     def check_line_id_exists(self):
-        """Check if the line ID already exists into the database, both into Fita_G and Lin_Tram_Proposta"""
+        """Check if the line ID already exists into the database, both into fita_mem and lin_tram_mem"""
         line_id_in_lin_tram = False
         line_id_in_fita_g = False
 
-        # Check into LIN_TRAM_PROPOSTA_SIDM2
+        # Check into lin_tram_mem
         tram_duplicated_id = self.tram_line_mem_gdf['id_linia'] == self.line_id
         tram_line_id = self.tram_line_mem_gdf[tram_duplicated_id]
         if not tram_line_id.empty:
             line_id_in_lin_tram = True
 
-        # Check into FITA_G_SIDM2
-        fita_g_duplicated_id = self.fita_mem_gdf['id_linia'] == self.line_id
-        fita_g_line_id = self.fita_mem_gdf[fita_g_duplicated_id]
-        if not fita_g_line_id.empty:
+        # Check into fita_mem
+        fita_duplicated_id = self.fita_mem_gdf['id_linia'] == self.line_id
+        fita_line_id = self.fita_mem_gdf[fita_duplicated_id]
+        if not fita_line_id.empty:
             line_id_in_fita_g = True
 
         if line_id_in_fita_g and line_id_in_lin_tram:
@@ -320,12 +335,18 @@ class CheckQualityLine(View):
         elif not line_id_in_fita_g and line_id_in_lin_tram:
             self.logger.error("L'ID Linia introduït no està en FitaG però sí en Lin_Tram_Proposta")
         elif not line_id_in_fita_g and not line_id_in_lin_tram:
-            self.logger.info("L'ID Linia no està repetit a SIDM2")
+            self.logger.info("L'ID Linia no està repetit a fita_mem i lin_tram_mem de SIDM3")
 
     def check_lin_tram_ppta_layer(self):
         """Check line's layer's field structure and content"""
-        self.check_fields_lin_tram_ppta()
+        # The line's layer's field structure is critic for the correct running of the QA process. If it's not correct,
+        # the process must stop
+        fields_lin_tram_ppta_ok = self.check_fields_lin_tram_ppta()
+        if not fields_lin_tram_ppta_ok:
+            return False
         self.check_fields_content_lint_tram_ppta()
+
+        return True
 
     def check_fields_lin_tram_ppta(self):
         """Check line's layer's field structure is correct"""
@@ -345,14 +366,16 @@ class CheckQualityLine(View):
 
         if field_match == len(true_fields):
             self.logger.info("L'estructura de camps de Lin_TramPpta és correcte")
+            return True
         else:
             self.logger.error("L'estructura de camps de Lin_TramPpta NO és correcte")
+            return False
 
     def check_fields_content_lint_tram_ppta(self):
         """Check line's layer's content is correct"""
         # Check that doesn't exist the line ID from another line
         line_id_error = False
-        not_line_id = self.lin_tram_ppta_line_gdf['ID_LINIA'] != self.line_id
+        not_line_id = self.lin_tram_ppta_line_gdf['ID_LINIA'] != int(self.line_id)
         tram_not_line_id = self.lin_tram_ppta_line_gdf[not_line_id]
         if not tram_not_line_id.empty:
             line_id_error = True
@@ -361,10 +384,10 @@ class CheckQualityLine(View):
         # Check that the fita ID is correct
         id_fita_error = False
         # F1
-        id_f1_bad = self.lin_tram_ppta_line_gdf['ID_FITA1'] == 1
+        id_f1_bad = self.lin_tram_ppta_line_gdf['ID_FITA1'] == '1'
         tram_id_f1_bad = self.lin_tram_ppta_line_gdf[id_f1_bad]
         # F2
-        id_f2_bad = self.lin_tram_ppta_line_gdf['ID_FITA2'] == 1
+        id_f2_bad = self.lin_tram_ppta_line_gdf['ID_FITA2'] == '1'
         tram_id_f2_bad = self.lin_tram_ppta_line_gdf[id_f2_bad]
 
         if not tram_id_f1_bad.empty or not tram_id_f2_bad.empty:
@@ -461,12 +484,10 @@ class CheckQualityLine(View):
     def info_vertexs_line(self):
         """Get info and make a recount of the line's vertexs"""
         self.logger.info('Vèrtexs de la linia:')
-        self.logger.info('      Tram ID   |   Nº vèrtex')
-
         for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
             tram_id = feature['ID']
             tram_vertexs = len(feature['geometry'].coords)   # Nº of vertexs that compose the tram
-            self.logger.info(f"        {tram_id}      |      {tram_vertexs}     ")
+            self.logger.info(f"      Tram ID : {tram_id}  |  Nº vèrtex : {tram_vertexs}")
 
     def check_points_decimals(self):
         """Check if the points's decimals are correct and are rounded to 1 decimal"""
@@ -708,6 +729,7 @@ class CheckQualityLine(View):
 
     def check_line_intersects_db(self):
         """Check that the line doesn't intersects or crosses the database lines"""
+        # TODO comprovar CRS
         intersects_db = self.lin_tram_ppta_line_gdf.intersects(self.tram_line_mem_gdf)
         features_intersects_db = self.lin_tram_ppta_line_gdf[intersects_db]
         if not features_intersects_db.empty:
@@ -718,6 +740,7 @@ class CheckQualityLine(View):
 
     def check_line_overlaps_db(self):
         """Check that the line doesn't overlaps the database lines"""
+        # TODO comprovar CRS
         overlaps_db = self.lin_tram_ppta_line_gdf.overlaps(self.tram_line_mem_gdf)
         features_overlaps_db = self.lin_tram_ppta_line_gdf[overlaps_db]
         if not features_overlaps_db.empty:
