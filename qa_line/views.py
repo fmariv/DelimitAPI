@@ -8,8 +8,7 @@
 # Version Python: 3.7
 # ----------------------------------------------------------
 
-# TODO comprovar amb capes que tinguin errors
-# TODO el camp ID_LINIA de Lin_TramPpta es critic, sense ell pot petar la resta. Pot ser revisar si falta aquest camp
+# TODO comprovar amb capes que tinguin errors - a partir "Decimetrització"
 
 """
 Quality check of a line ready to upload to the database
@@ -494,8 +493,13 @@ class CheckQualityLine(View):
         decim_valid = True
         for index, feature in self.punt_line_gdf.iterrows():
             # Point parameters
-            point_etiqueta = feature['ETIQUETA']
-            point_id = feature['ID_PUNT']
+            '''
+            Due the add respone function converts all the logger's messages into a JSON splitting the reports by "-"
+            is mandatory to avoid using that character in the reports in order to don't lose data adding the messages
+            to the JSON.
+            '''
+            point_num = feature['ETIQUETA'].split('-')[-1]
+            point_id = feature['ID_PUNT'].split('-')[-1]
             point_x = feature['geometry'].x
             point_y = feature['geometry'].y
             # Check if rounded correctly
@@ -503,7 +507,7 @@ class CheckQualityLine(View):
             dif_y = abs(point_y - round(point_y, 1))
             if dif_x > 0.01 or dif_y > 0.01:
                 decim_valid = False
-                self.logger.error(f"El punt de la fita {point_id} | {point_etiqueta} no està correctament decimetritzat")
+                self.logger.error(f"El punt de la fita amb ID_PUNT : {point_id} | Etiqueta : F {point_num} no està correctament decimetritzat")
 
         if decim_valid:
             self.logger.info('Les fites estan correctament decimetritzades')
@@ -573,8 +577,8 @@ class CheckQualityLine(View):
         if not bad_auxiliary_points.empty:
             valid = False
             for index, feature in bad_auxiliary_points.iterrows():
-                point_id = feature['ID_PUNT']
-                self.logger.error(f"      El punt {point_id} està mal indicat a P_Proposta.")
+                point_id = feature['ID_PUNT'].split('-'[-1])
+                self.logger.error(f"      El punt amb ID PUNT : {point_id} està mal indicat a P_Proposta.")
 
         return valid
 
@@ -616,8 +620,10 @@ class CheckQualityLine(View):
         if not founded_points_no_photo:
             self.logger.info('Totes les fites trobades tenene fotografia')
         else:
-            for etiqueta, id_punt in founded_points_no_photo.items():
-                self.logger.error(f'      La {etiqueta} - {id_punt} és trobada però no té cap fotografia indicada')
+            for etiqueta, point_id in founded_points_no_photo.items():
+                etiqueta = etiqueta.split('-')[-1]
+                point_id = point_id.split('-')[-1]
+                self.logger.error(f'      La fita F {etiqueta} | ID PUNT : {point_id} és trobada però no té cap fotografia indicada')
 
     def check_photo_name(self):
         """Check that the photography in the layer has the same name as de .JPG file"""
@@ -650,10 +656,12 @@ class CheckQualityLine(View):
                 ppf_z_dict[etiqueta] = point_id
 
         z_coord_valid = True
-        for etiqueta, id_punt in ppf_z_dict.items():
-            if id_punt not in self.founded_points_dict.values():
+        for etiqueta, point_id in ppf_z_dict.items():
+            if point_id not in self.founded_points_dict.values():
                 z_coord_valid = False
-                self.logger.error(f'La {etiqueta} - {id_punt} té coordenada Z però no és fita trobada')
+                etiqueta = etiqueta.split('-')[-1]
+                point_id = point_id.split('-')[-1]
+                self.logger.error(f'La F {etiqueta} | ID PUNT : {point_id} té coordenada Z però no és fita trobada')
 
         if z_coord_valid:
             self.logger.info('Totes les fites amb coordenada Z són trobades')
@@ -688,7 +696,8 @@ class CheckQualityLine(View):
             point_id = feature['ID_PUNT']
             if point_id not in points_id_list:
                 p_proposta_valid = False
-                self.logger.error(f'El punt {point_id} de la taula P_PROPOSTA no està a la capa Punt')
+                point_id = point_id.split('-')[-1]
+                self.logger.error(f'El registre amb ID PUNT : {point_id} de la taula P_PROPOSTA no està a la capa Punt')
         if p_proposta_valid:
             self.logger.info('      Correspondència OK entre els punts de P_PROPOSTA i Punt')
 
@@ -698,7 +707,8 @@ class CheckQualityLine(View):
             point_id_ = feature_['ID_PUNT']
             if point_id_ not in points_id_list:
                 punt_fit_valid = False
-                self.logger.error(f'El punt {point_id_} de la taula PUNT_FIT no està a la capa Punt')
+                point_id = point_id.split('-')[-1]
+                self.logger.error(f'El registre amb ID PUNT : {point_id_} de la taula PUNT_FIT no està a la capa Punt')
         if punt_fit_valid:
             self.logger.info('      Correspondència OK entre els punts de PUNT_FIT i Punt')
 
@@ -729,7 +739,6 @@ class CheckQualityLine(View):
 
     def check_line_intersects_db(self):
         """Check that the line doesn't intersects or crosses the database lines"""
-        # TODO comprovar CRS
         intersects_db = self.lin_tram_ppta_line_gdf.intersects(self.tram_line_mem_gdf)
         features_intersects_db = self.lin_tram_ppta_line_gdf[intersects_db]
         if not features_intersects_db.empty:
@@ -740,7 +749,6 @@ class CheckQualityLine(View):
 
     def check_line_overlaps_db(self):
         """Check that the line doesn't overlaps the database lines"""
-        # TODO comprovar CRS
         overlaps_db = self.lin_tram_ppta_line_gdf.overlaps(self.tram_line_mem_gdf)
         features_overlaps_db = self.lin_tram_ppta_line_gdf[overlaps_db]
         if not features_overlaps_db.empty:
@@ -798,9 +806,9 @@ class CheckQualityLine(View):
                 aux = point['AUX'].values[0]
                 n_fita = point['ID_FITA'].values[0]
                 if aux == 1:
-                    self.logger.info(f'      La F-{n_fita} no està a sobre de la linia i és auxiliar')
+                    self.logger.info(f'      La F {n_fita} no està a sobre de la linia i és auxiliar')
                 else:
-                    self.logger.error(f'      La F-{n_fita} no està a sobre de la linia i NO és auxiliar')
+                    self.logger.error(f'      La F {n_fita} no està a sobre de la linia i NO és auxiliar')
 
     def get_round_line_coordinates(self):
         """
@@ -819,7 +827,7 @@ class CheckQualityLine(View):
 
     def write_first_report(self):
         """Write first log's report"""
-        init_log_report = f"ID Linia = {self.line_id_txt}:  Data i hora CQ: {self.current_date}"
+        init_log_report = f"ID Linia : {self.line_id_txt} |  Data i hora CQ : {self.current_date}"
         self.logger.info(init_log_report)
 
     def rm_temp(self):
