@@ -8,7 +8,8 @@
 # Version Python: 3.7
 # ----------------------------------------------------------
 
-# TODO comprovar amb capes que tinguin errors - a partir "Decimetrització"
+# TODO no comprueva bien el self-intersect
+# TODO arreglar el problema de procesos que cogen el txt del log si no se cierra correctamente el proceso
 
 """
 Quality check of a line ready to upload to the database
@@ -425,7 +426,7 @@ class CheckQualityLine(View):
 
     def check_layers_geometry(self):
         """Check the geometry of both line and points"""
-        self.logger.info('Comprovació de les geometries')
+        self.logger.info('Comprovació de les geometries...')
         self.logger.info('Lin_Tram_Proposta :')
         self.check_lin_tram_geometry()
         self.logger.info('Punt :')
@@ -482,7 +483,7 @@ class CheckQualityLine(View):
 
     def info_vertexs_line(self):
         """Get info and make a recount of the line's vertexs"""
-        self.logger.info('Vèrtexs de la linia:')
+        self.logger.info('Vèrtexs de la linia :')
         for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
             tram_id = feature['ID']
             tram_vertexs = len(feature['geometry'].coords)   # Nº of vertexs that compose the tram
@@ -507,7 +508,7 @@ class CheckQualityLine(View):
             dif_y = abs(point_y - round(point_y, 1))
             if dif_x > 0.01 or dif_y > 0.01:
                 decim_valid = False
-                self.logger.error(f"El punt de la fita amb ID_PUNT : {point_id} | Etiqueta : F {point_num} no està correctament decimetritzat")
+                self.logger.error(f"La fita F {point_num}  |  ID_PUNT : {point_id} no està correctament decimetritzada")
 
         if decim_valid:
             self.logger.info('Les fites estan correctament decimetritzades')
@@ -527,7 +528,7 @@ class CheckQualityLine(View):
         # Check that the points in P_Proposta are correctly indicated
         real_points_valid = self.check_real_points()
         if ordpf_valid and real_points_valid:
-            self.logger.info(f'Tots els registre de la taula P_Proposta són vàlids')
+            self.logger.info(f'Tots els registre de la taula P_Proposta són vàlids.')
 
     def count_points(self):
         """Count the points in the table P_Proposta and distinguish them depending on its type"""
@@ -561,8 +562,8 @@ class CheckQualityLine(View):
         if not points_ordpf_null.empty:
             valid = False
             for index, feature in points_ordpf_null.iterrows():
-                point_id = feature['ID_PUNT']
-                self.logger.error(f"      El camp ORDPF del punt {point_id} és nul")
+                point_id = feature['ID_PUNT'].split('-')[-1]
+                self.logger.error(f"      El camp ORDPF del punt {point_id} a la taula PUNT_FIT és nul.")
 
         return valid
 
@@ -577,8 +578,9 @@ class CheckQualityLine(View):
         if not bad_auxiliary_points.empty:
             valid = False
             for index, feature in bad_auxiliary_points.iterrows():
-                point_id = feature['ID_PUNT'].split('-'[-1])
-                self.logger.error(f"      El punt amb ID PUNT : {point_id} està mal indicat a P_Proposta.")
+                point_id = feature['ID_PUNT'].split('-')[-1]
+                self.logger.error(f"      El punt amb ID PUNT : {point_id} està mal indicat a P_Proposta: sembla que es tracta "
+                                  f"d'una fita auxiliar indicada com a fita real")
 
         return valid
 
@@ -590,7 +592,7 @@ class CheckQualityLine(View):
 
         for aux_id in auxiliary_points_id_list:
             if aux_id not in real_points.values:
-                self.logger.error(f"      La fita auxiliar {aux_id} no té correctament indicat l'ID de la fita real")
+                self.logger.error(f"      La fita auxiliar {aux_id} no té correctament indicat l'ID de la fita real.")
 
     def check_found_points(self):
         """
@@ -615,15 +617,15 @@ class CheckQualityLine(View):
         # Only points that are PPF
         ppf_with_photo_list = [point_id for point_id in points_with_photo_list if point_id in self.ppf_list]
         # Get a dict with the founded points without photography
-        founded_points_no_photo = {etiqueta(id_punt) for etiqueta, id_punt in self.founded_points_dict.items() if id_punt not in ppf_with_photo_list}
+        founded_points_no_photo = {etiqueta: id_punt for (etiqueta, id_punt) in self.founded_points_dict.items() if id_punt not in ppf_with_photo_list}
 
         if not founded_points_no_photo:
-            self.logger.info('Totes les fites trobades tenene fotografia')
+            self.logger.info('Totes les fites trobades tenen fotografia.')
         else:
             for etiqueta, point_id in founded_points_no_photo.items():
                 etiqueta = etiqueta.split('-')[-1]
                 point_id = point_id.split('-')[-1]
-                self.logger.error(f'      La fita F {etiqueta} | ID PUNT : {point_id} és trobada però no té cap fotografia indicada')
+                self.logger.error(f'      La fita F {etiqueta}  |  ID PUNT : {point_id} és trobada però no té cap fotografia indicada.')
 
     def check_photo_name(self):
         """Check that the photography in the layer has the same name as de .JPG file"""
@@ -633,16 +635,16 @@ class CheckQualityLine(View):
         # Get a list with the photographies's filename from PPF
         photo_exists = self.punt_line_gdf['FOTOS'].notnull()
         points_with_photo = self.punt_line_gdf[photo_exists]
-        founded_points_photos = [feature['FOTOS'] for index, feature in points_with_photo.iterrows() if feature['FOTOS'] in self.ppf_list]
+        founded_points_photos = [feature['FOTOS'] for index, feature in points_with_photo.iterrows() if feature['ID_PUNT'] in self.ppf_list]
         # Check that the photography in the point layer has the same filename as the photography into the folder
         photos_valid = True
         for photo_filename in founded_points_photos:
             if photo_filename not in folder_photos_filenames:
                 photos_valid = False
-                self.logger.error(f'La fotografia {photo_filename} no està a la carpeta de Fotografies')
+                self.logger.error(f'La fotografia {photo_filename} no està a la carpeta de Fotografies.')
 
         if photos_valid:
-            self.logger.info('Totes les fotografies informades a la capa Punt estan a la carpeta de Fotografies')
+            self.logger.info('Totes les fotografies informades a la capa Punt estan a la carpeta de Fotografies.')
 
     def check_cota_fita(self):
         """Check that a point with Z coordinate is founded"""
@@ -661,29 +663,27 @@ class CheckQualityLine(View):
                 z_coord_valid = False
                 etiqueta = etiqueta.split('-')[-1]
                 point_id = point_id.split('-')[-1]
-                self.logger.error(f'La F {etiqueta} | ID PUNT : {point_id} té coordenada Z però no és fita trobada')
+                self.logger.error(f'La F {etiqueta}  |  ID PUNT : {point_id} té coordenada Z però no és fita trobada.')
 
         if z_coord_valid:
             self.logger.info('Totes les fites amb coordenada Z són trobades')
 
     def check_3termes(self):
         """Check 3 terms points"""
-        msg = ("Les F3T tenen informat el camp CONTACTE", "Hi ha fites 3 termes sense contacte")
-
         # Get df with points sorted by etiqueta
         sorted_points_df = self.punt_line_gdf.sort_values(by=['ETIQUETA'])
         # Get a list with the contact field from both first and last point
         first_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[0]
         last_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[-1]
         if first_point['CONTACTE'] and last_point['CONTACTE']:
-            self.logger.info('Les fites 3T tenen informat el camp CONTACTE')
+            self.logger.info('Les fites 3T tenen informat el camp CONTACTE.')
         else:
-            self.logger.error('Hi ha fites 3T sense tenir informat el camp CONTACTE')
+            self.logger.error('Hi ha fites 3T que no tenen informat el camp CONTACTE.')
 
         # Recount how many points have the CONTACTE field not empty
         informed_3t_points = self.punt_line_gdf[self.punt_line_gdf['CONTACTE'].notnull()]
         n_informed_3t_points = informed_3t_points.shape[0]
-        self.logger.info(f'Hi ha un total de {n_informed_3t_points} fites amb el camp CONTACTE informat')
+        self.logger.info(f'Hi ha un total de {n_informed_3t_points} fites amb el camp CONTACTE informat.')
 
     def check_relation_points_tables(self):
         """Check that all the points that exist in the tables exist in the point layer"""
@@ -697,9 +697,9 @@ class CheckQualityLine(View):
             if point_id not in points_id_list:
                 p_proposta_valid = False
                 point_id = point_id.split('-')[-1]
-                self.logger.error(f'El registre amb ID PUNT : {point_id} de la taula P_PROPOSTA no està a la capa Punt')
+                self.logger.error(f'El registre amb ID PUNT : {point_id} de la taula P_PROPOSTA no està a la capa Punt.')
         if p_proposta_valid:
-            self.logger.info('      Correspondència OK entre els punts de P_PROPOSTA i Punt')
+            self.logger.info('      Correspondència OK entre els punts de P_PROPOSTA i Punt.')
 
         # Check that all the ID_PUNT from PUNT_FIT exist in the point layer
         punt_fit_valid = True
@@ -707,10 +707,10 @@ class CheckQualityLine(View):
             point_id_ = feature_['ID_PUNT']
             if point_id_ not in points_id_list:
                 punt_fit_valid = False
-                point_id = point_id.split('-')[-1]
-                self.logger.error(f'El registre amb ID PUNT : {point_id_} de la taula PUNT_FIT no està a la capa Punt')
+                point_id_ = point_id.split('-')[-1]
+                self.logger.error(f'El registre amb ID PUNT : {point_id_} de la taula PUNT_FIT no està a la capa Punt.')
         if punt_fit_valid:
-            self.logger.info('      Correspondència OK entre els punts de PUNT_FIT i Punt')
+            self.logger.info('      Correspondència OK entre els punts de PUNT_FIT i Punt.')
 
     def check_topology(self):
         """Check topology"""
@@ -727,35 +727,48 @@ class CheckQualityLine(View):
         self.check_auxiliary_point()
 
     def check_line_crosses_itself(self):
-        """Check that the line doesn't intersects or touches itself"""
-        is_valid = self.lin_tram_ppta_line_gdf.is_valid
-        invalid_features = self.lin_tram_ppta_line_gdf[~is_valid]
+        """
+        Check that the line doesn't intersects or touches itself. In order to do that, iterates over
+        every line's geometry and checks if it crosses any of the other lines
+        """
+        valid = True
+        # Check if some tram does self-intersect
+        tram_is_valid = self.lin_tram_ppta_line_gdf.is_valid
+        invalid_features = self.lin_tram_ppta_line_gdf[~tram_is_valid]
         if not invalid_features.empty:
-            for index, feature in invalid_features.iterrows():
-                tram_id = feature['ID']
-                self.logger.error(f"      El tram {tram_id} s'intersecta o toca a sí mateix")
-        else:
-            self.logger.info("      Els trams de la linia no s'intersecten o toquen a sí mateixos")
+            valid = False
+            for i, invalid_feature in invalid_features.iterrows():
+                tram_id = invalid_feature['ID']
+                self.logger.error(f"      El tram {tram_id} de la línia s'intersecta o toca a sí mateix.")
+        # Check if some tram intersects another line's tram
+        for i, tram in self.lin_tram_ppta_line_gdf.iterrows():
+            line = self.lin_tram_ppta_line_gdf[self.lin_tram_ppta_line_gdf['geometry'] != tram['geometry']]
+            # Iterates over the other line's trams to check if the curren tram crosses the others
+            for i_, tram_ in line.iterrows():
+                if tram['geometry'].crosses(tram_['geometry']):
+                    valid = False
+                    self.logger.error(f'      El tram {tram["ID"]} de la línia talla el '
+                          f'tram {tram_["ID"]} de la mateixa línia.')
+        if valid:
+            self.logger.info("      Els trams de la linia no s'intersecten o toquen a sí mateixos.")
 
     def check_line_intersects_db(self):
         """Check that the line doesn't intersects or crosses the database lines"""
-        intersects_db = self.lin_tram_ppta_line_gdf.intersects(self.tram_line_mem_gdf)
-        features_intersects_db = self.lin_tram_ppta_line_gdf[intersects_db]
+        features_intersects_db = gpd.sjoin(self.lin_tram_ppta_line_gdf, self.tram_line_mem_gdf, op='intersects')
         if not features_intersects_db.empty:
             for index, feature in features_intersects_db.iterrows():
-                self.logger.error(f"      El tram {feature['ID']} talla algun tram de la base de dades")
+                self.logger.error(f"      El tram {feature['ID']} de la línia talla algun tram de la base de dades.")
         else:
-            self.logger.info('      Els trams de la linia no intersecten cap tram de la base de dades')
+            self.logger.info('      Els trams de la linia no intersecten cap tram de la base de dades.')
 
     def check_line_overlaps_db(self):
         """Check that the line doesn't overlaps the database lines"""
-        overlaps_db = self.lin_tram_ppta_line_gdf.overlaps(self.tram_line_mem_gdf)
-        features_overlaps_db = self.lin_tram_ppta_line_gdf[overlaps_db]
+        features_overlaps_db = gpd.sjoin(self.lin_tram_ppta_line_gdf, self.tram_line_mem_gdf, op='contains')
         if not features_overlaps_db.empty:
             for index, feature in features_overlaps_db.iterrows():
-                self.logger.error(f"      El tram {feature['ID']} es sobreposa a algun tram de la base de dades")
+                self.logger.error(f"      El tram {feature['ID']} de la línia es sobreposa a algun tram de la base de dades.")
         else:
-            self.logger.info('      Els trams de la linia no es sobreposen a cap tram de la base de dades')
+            self.logger.info('      Els trams de la linia no es sobreposen a cap tram de la base de dades.')
 
     def check_endpoint_covered_point(self):
         """Check that the coordinates of the lines endpoints are equal to any point"""
@@ -771,10 +784,10 @@ class CheckQualityLine(View):
 
             if (first_endpoint or last_endpoint) not in self.points_coords_dict.values():
                 endpoint_covered = False
-                self.logger.error(f'      Algun dels punts finals del tram {tram_id} no coincideix amb una fita de la capa Punt')
+                self.logger.error(f'      Algun dels punts finals del tram {tram_id} no coincideixen amb una fita de la capa Punt.')
 
         if endpoint_covered:
-            self.logger.info('      Tots els punts finals dels trams de la linia coincideixen amb una fita de la capa Punt')
+            self.logger.info('      Tots els punts finals dels trams de la linia coincideixen amb una fita de la capa Punt.')
 
     def get_round_point_coordinates(self):
         """
@@ -806,9 +819,9 @@ class CheckQualityLine(View):
                 aux = point['AUX'].values[0]
                 n_fita = point['ID_FITA'].values[0]
                 if aux == 1:
-                    self.logger.info(f'      La F {n_fita} no està a sobre de la linia i és auxiliar')
+                    self.logger.info(f'      La F {n_fita} no està a sobre de la linia i és auxiliar.')
                 else:
-                    self.logger.error(f'      La F {n_fita} no està a sobre de la linia i NO és auxiliar')
+                    self.logger.error(f'      La F {n_fita} no està a sobre de la linia i NO és auxiliar.')
 
     def get_round_line_coordinates(self):
         """
