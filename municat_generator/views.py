@@ -73,8 +73,8 @@ class MunicatDataGenerator(View):
         # START THE PROCESS --------------------------------------
         # Check that the input data file exists
         if not path.exists(MTT):
-            msg = "No s'ha trobat l'arxiu amb l'informació d'entrada"
-            self.create_error_response(msg)
+            messages.error(request, "No s'ha trobat l'arxiu amb l'informació d'entrada")
+            return redirect("index")
 
         with open(MTT) as f:
             f_reader = csv.reader(f, delimiter=",")
@@ -93,24 +93,28 @@ class MunicatDataGenerator(View):
                 try:
                     self.rm_temp()  # Delete previous temp files if exist
                 except Exception as e:
-                    msg = f'Error esborrant arxius temporals => {e}'
-                    self.create_error_response(msg)
+                    msg = f'Error esborrant arxius temporals per la línia {line_id} => {e}'
+                    self.add_warning_response(msg, line_id)
+                    break
                 # Check if the session_id exists in the database
                 session_id_exists = self.check_session_id()
                 if not session_id_exists:
-                    msg = "L'ID Sessio introduït no existeix a la base de dades"
-                    self.create_error_response(msg)
+                    msg = f"L'ID sessió introduït per la línia {line_id} no existeix a la base de dades"
+                    self.add_warning_response(msg, line_id)
+                    break
                 # Extract points and lines and export them as shapefiles
                 try:
                     self.extract_data()
                 except Exception as e:
-                    msg = f'Error extraient les geometries de la base de dades => {e}'
-                    self.create_error_response(msg)
+                    msg = f'Error extraient les geometries de la línia {line_id} de la base de dades => {e}'
+                    self.add_warning_response(msg, line_id)
+                    break
                 # Check if exists other line ID's in the data extracted
                 line_id_ok = self.check_line_id()
                 if not line_id_ok:
                     msg = f'Hi ha un o més ID Linia a les dades que no corresponen a la linia {self.line_id}'
-                    self.create_error_response(msg)
+                    self.add_warning_response(msg, line_id)
+                    break
                 # Delete auxiliary points from the point gdf
                 self.delete_aux()
                 # Delete and manage columns to the gdf
@@ -127,14 +131,22 @@ class MunicatDataGenerator(View):
                 self.copy_pdf()
 
                 self.logger.info(f'Carpeta municat de la línia {line_id} generada correctament')
-        # Send response as OK
-        self.response_data['result'] = 'OK'
-        self.response_data['message'] = f'Carpetes generades correctament'
-        if self.response_data['result'] == 'OK':
-            messages.success(request, 'Carpetes generades correctament!')
-            return redirect("index")
+
+        # Send response. The message's type depends on the success of the process. In that sense, if exists
+        # any line ID in a warning-line JSON array it indicates that for some reason, the app could not be able
+        # to generate the output folder for that line ID
+        print(list(self.response_data['warning-lines']))
+        if self.response_data['warning-lines']:
+            self.response_data['result'] = 'warning'
+            if len(self.response_data['warning-lines']) > 1:
+                messages.warning(request, f"No s'han generat les carpetes per les línies {self.response_data['warning-lines']}")
+            else:
+                line_id_warning = self.response_data['warning-lines'][0]
+                messages.warning(request, f"No s'ha pogut generar la carpeta per la línia {line_id_warning}")
         else:
-            messages.warning(request, "No s'han generat les carpetes")
+            self.response_data['result'] = 'OK'
+            self.response_data['message'] = f'Carpetes generades correctament'
+            messages.success(request, 'Carpetes generades correctament!')
         return redirect("index")
 
     def set_up(self):
@@ -176,7 +188,7 @@ class MunicatDataGenerator(View):
 
     def set_municat_data(self, line_id, session_id, mtt_date, mtt_num):
         """
-
+        Extract the data from the input csv file and set it as class parameters
         :return:
         """
         self.line_id = line_id
@@ -186,18 +198,18 @@ class MunicatDataGenerator(View):
 
     def get_muni_names(self):
         """
-
+        Get the names of the municipis that share de line
         :return:
         """
         line_id_filter = self.line_id_muni_gdf['IDLINIA'] == int(self.line_id)
         munis_line_id = self.line_id_muni_gdf[line_id_filter]
-        self.muni_1 = munis_line_id.NOMMUNI1.iloc[0].replace(' ', '_')
-        self.muni_2 = munis_line_id.NOMMUNI2.iloc[0].replace(' ', '_')
+        self.muni_1 = munis_line_id.NOMMUNI1.iloc[0]
+        self.muni_2 = munis_line_id.NOMMUNI2.iloc[0]
 
     def check_session_id(self):
         """
         Check if the given session ID exists in the database, both in line and points layers
-        :return:
+        :return: boolean that indicates if the given session ID exists in the database
         """
         if (self.session_id in self.line_tram_mem_gdf.id_sessio_.values) and (self.session_id in self.fita_mem_gdf.id_sessio_.values):
             return True
@@ -205,10 +217,7 @@ class MunicatDataGenerator(View):
             return False
 
     def extract_data(self):
-        """
-        Extract, manage and export the data
-        :return:
-        """
+        """Extract, manage and export the data"""
         for layer in self.fita_mem_gdf, self.line_tram_mem_gdf:
             geom_type = ''
             session_line_id_gdf = layer[(layer['id_sessio_'] == self.session_id) & (layer['id_linia'] == float(self.line_id))]
@@ -230,18 +239,11 @@ class MunicatDataGenerator(View):
                 self.line_tram_temp_gdf = gpd.read_file(WORK_GPKG, layer=layer_name)
 
     def delete_aux(self):
-        """
-
-        :return:
-        """
-        # TODO comprovar amb una línia amb fites auxiliars
+        """Delete auxiliary points from the points layers"""
         self.fita_temp_gdf = self.fita_temp_gdf[self.fita_temp_gdf['id_u_fita'].str[-1] != '1']
 
     def manage_delete_fields(self):
-        """
-
-        :return:
-        """
+        """Edit and delete both layers' fields in order to keep only the important ones"""
         # Points gdf
         point_delete_fields = ['id_fita', 'id_sessio_', 'num_sector', 'ini_sector', 'fin_sector', 'point_x', 'point_y',
                                'point_z', 'estat', 'num_fita_a', 'id_u_fita', 'etiqueta', 'id_punt', 'num_termes',
@@ -260,17 +262,11 @@ class MunicatDataGenerator(View):
         self.line_tram_temp_gdf = self.line_tram_temp_gdf.rename({'id_linia': 'ID_LINIA'}, axis='columns')
 
     def dissolve_line(self):
-        """
-
-        :return:
-        """
+        """Dissolve all the line's tram into a single line"""
         self.line_tram_temp_gdf = self.line_tram_temp_gdf.dissolve(by='ID_LINIA', as_index=False)
 
     def add_munis_names(self):
-        """
-
-        :return:
-        """
+        """Add municipis' names to the layers"""
         for layer in self.fita_temp_gdf, self.line_tram_temp_gdf:
             layer['NOMMUNI1'] = self.muni_1
             layer['NOMMUNI2'] = self.muni_2
@@ -295,8 +291,8 @@ class MunicatDataGenerator(View):
 
     def check_line_id(self):
         """
-
-        :return:
+        Check if exists the line ID from another line which isn't the line that the user wants to extract the data about.
+        :return: boolean that indicates if exists the line ID from another line
         """
         # Points gdf
         not_line_id_fita = self.fita_temp_gdf['id_linia'] != int(self.line_id)
@@ -314,12 +310,12 @@ class MunicatDataGenerator(View):
 
     def export_data(self):
         """
-
-        :return:
+        Export the data extracted into a single directory. The geometries are exported into a zip file.
         """
         # Folders paths
-        self.path_output_folder = os.path.join(FOLDERS, self.line_id)
-        path_output_zip = os.path.join(self.path_output_folder, self.line_id)
+        int_line_id = str(int(self.line_id))   # The folder's name must be the line ID without zeros
+        self.path_output_folder = os.path.join(FOLDERS, int_line_id)
+        path_output_zip = os.path.join(self.path_output_folder, int_line_id)
         for path_ in self.path_output_folder, path_output_zip:
             if not path.exists(path_):
                 os.mkdir(path_)
@@ -327,9 +323,13 @@ class MunicatDataGenerator(View):
         # Line ID as txt
         line_id_txt = self.line_id_2_txt()
 
+        # Normalize municipis names to avoid encoding problems
+        muni_1_normalized = self.muni_1.replace(' ', '_')
+        muni_2_normalized = self.muni_2.replace(' ', '_')
+
         # Layer names
-        output_fita_lyr_name = f"MTT_F_{line_id_txt}_{self.mtt_date}_{self.mtt_num}_{self.muni_1}_{self.muni_2}"
-        output_line_lyr_name = f"MTT_LT_{line_id_txt}_{self.mtt_date}_{self.mtt_num}_{self.muni_1}_{self.muni_2}"
+        output_fita_lyr_name = f"MTT_F_{line_id_txt}_{self.mtt_date}_{self.mtt_num}_{muni_1_normalized}_{muni_2_normalized}"
+        output_line_lyr_name = f"MTT_LT_{line_id_txt}_{self.mtt_date}_{self.mtt_num}_{muni_1_normalized}_{muni_2_normalized}"
 
         # Export data as shapefiles
         output_fita_shp = os.path.join(path_output_zip, f'{output_fita_lyr_name}.shp')
@@ -351,8 +351,8 @@ class MunicatDataGenerator(View):
 
     def line_id_2_txt(self):
         """
-
-        :return:
+        Convert the line ID from integer to text, adding 0 if necessary in order to have a code with 4 characters.
+        :return: line_id_txt -> line ID converted into string with 4 characters.
         """
         line_id_str = str(self.line_id)
         if len(line_id_str) == 1:
@@ -368,8 +368,7 @@ class MunicatDataGenerator(View):
 
     def copy_pdf(self):
         """
-
-        :return:
+        Copy the needed PDF file into the main directory.
         """
         line_dir = path.join(LINES_DIR, self.line_id)
         path_pdf_ed50 = path.join(line_dir, PDF_ED50)
@@ -392,6 +391,7 @@ class MunicatDataGenerator(View):
                         path_pdf = path.join(dirpath, filename)
         if not path_pdf:
             self.logger.error("No s'ha trobat cap PDF a exportar")
+            return
 
         # Check whether the PDF file already exists into the output folder and remove it if exists
         if path.exists(path_pdf_output):
@@ -400,11 +400,19 @@ class MunicatDataGenerator(View):
         # Copy the PDF file into the output folder
         shutil.copyfile(path_pdf, path_pdf_output)
 
-    def create_error_response(self, message):
-        """Create a error JSON for the response data"""
+    def add_warning_response(self, message, line_id):
+        """
+        Add the line ID to the JSON response data as a warning that the app could not be able to generate
+        the output for that line ID
+        """
         self.logger.error(message)
-        self.response_data['result'] = 'error'
-        self.response_data['message'] = message
+        # Check if 'warning-lines' key exists in the JSON response
+        if 'warning-lines' not in self.response_data:
+            self.response_data['warning-lines'] = []
+            self.response_data['warning-lines'].append(line_id)
+        # Check if the line ID already exists in the JSON response
+        if line_id not in self.response_data['warning-lines']:
+            self.response_data['warning-lines'].append(line_id)
 
     def rm_temp(self):
         """Remove temporal files from the workspace"""

@@ -4,11 +4,10 @@
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Cesc Masdeu & Fran Martin
 # Version: 0.1
-# Date: 20201103
+# Date: 20210209
 # Version Python: 3.7
 # ----------------------------------------------------------
 
-# TODO no comprueva bien el self-intersect
 # TODO arreglar el problema de procesos que cogen el txt del log si no se cierra correctamente el proceso
 
 """
@@ -888,8 +887,8 @@ def open_qgis(request):
 
 def render_qa_page(request):
     """
-
-    :param request:
+    Render the same qa page itself
+    :param request: Rendering of the qa page
     :return:
     """
     return render(request, '../templates/qa_page.html')
