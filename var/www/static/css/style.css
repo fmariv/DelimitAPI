@@ -34,7 +34,7 @@ body {
     text-align: center;
 }
 .content-container{
-    height: 85%;
+    height: 80%;
     background: linear-gradient(#7F7F7F 50%, #F7F7F7 50%);
     overflow: hidden;
 }
@@ -120,4 +120,16 @@ body {
 .btn {
     background-color: #535353 !important;
     border: 0.5px solid #535353 !important;
+}
+.footer {
+    background-color: #7F7F7F;
+    width: 100%;
+    height: 5%;
+    text-align: center;
+    color: white;
+    font-style: italic;
+    padding-top: 0.2%;
+}
+.footer > a {
+    color: white;
 }
