@@ -4,17 +4,17 @@
 <head>
     <meta charset="UTF-8">
     <title>Eines de Delimitació territorial</title>
-    <link rel="icon" type="image/png" href="{% static 'img/favicon.ico' %}"/>
-    <link rel="stylesheet" type="text/css" href="{% static 'css/style.css' %}" />
+    <link rel="icon" type="image/png" href="{% static 'static/img/favicon.ico' %}"/>
+    <link rel="stylesheet" type="text/css" href="{% static 'static/css/style.css' %}" />
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" />
     {% block css %}{% endblock %}
 </head>
 <body>
     <div class="header">
-	    <a href="{% url 'index' %}"><img class="logo" src="{% static 'img/logo_icgc.jpg' %}" width="220" height="80"/></a>
+	    <a href="{% url 'index' %}"><img class="logo" src="{% static 'static/img/logo_icgc.jpg' %}" width="220" height="80"/></a>
         <div class="title-logo-udt">
             <p class="udt-title">Unitat de Delimitació territorial</p>
-            <img class="logo-udt" src="{% static 'img/logo_udt.jpg' %}" width="50" height="50"/>
+            <img class="logo-udt" src="{% static 'static/img/logo_udt.jpg' %}" width="50" height="50"/>
         </div>
 	</div>
     <div class="content-container">
@@ -24,6 +24,9 @@
         {% endblock %}
         {% block apps_content %}
         {% endblock %}
+    </div>
+    <div class="footer">
+        Per anar a eines anteriors, com l'aplicació del Ramiro, fer click aquí
     </div>
 </body>
 <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>

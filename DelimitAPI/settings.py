@@ -139,8 +139,8 @@ USE_TZ = True
 STATIC_ROOT = BASE_DIR / 'staticfiles/'
 
 # The URL to use when referring to static files (where they will be served from)
-# STATIC_URL = str(os.getenv('STATIC_URL'))
-STATIC_URL = 'static/'
+STATIC_URL = str(os.getenv('STATIC_URL'))
+# STATIC_URL = 'static/'
 
 STATICFILES_DIRS = [
     BASE_DIR / 'var/www/static/'
