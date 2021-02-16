@@ -19,6 +19,7 @@ import os
 import os.path as path
 from datetime import datetime
 import logging
+import re
 
 # Third party imports
 import geopandas as gpd
@@ -664,9 +665,23 @@ class CheckQualityLine(View):
 
     def check_3termes(self):
         """Check 3 terms points"""
-        # Get df with points sorted by etiqueta
-        sorted_points_df = self.punt_line_gdf.sort_values(by=['ETIQUETA'])
+        # Get df with points sorted by etiqueta, firstly creating a new sorting column that containts the numbers
+        # from the ETIQUETA field as integers, in order to correctly sort the point numbers
+        sorted_points_df_temp = self.punt_line_gdf
+        etiquetes = sorted_points_df_temp['ETIQUETA'].tolist()
+        etiquetes_int = []
+        for i in etiquetes:
+            point_num = int(re.search(r'\d+', i).group())
+            etiquetes_int.append(point_num)
+        # Add sorting column
+        sorted_points_df_temp['sorting'] = etiquetes_int
+        # Sort by the new column
+        sorted_points_df = sorted_points_df_temp.sort_values(by=['sorting'])
+        # Filter by ppf points
+        ppf_point = sorted_points_df['ID_PUNT'].isin(self.ppf_list)
+        sorted_points_df = sorted_points_df[ppf_point]
         # Get a list with the contact field from both first and last point
+        # TODO comprovar que si una fita inicial o final tiene auxiliar, que ambas tengan el campo contacto llenado
         first_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[0]
         last_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[-1]
         if first_point['CONTACTE'] and last_point['CONTACTE']:
