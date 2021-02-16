@@ -107,7 +107,7 @@ class CheckQualityLine(View):
         # Copy layers and tables from line's folder to the workspace
         copied_data_ok = self.copy_data_2_gpkg()
         if not copied_data_ok:
-            msg = "No s'han pogut copiar capes o taules. Veure log per informació més detallada."
+            msg = "No s'han pogut copiar capes o taules. Veure log per més informació."
             response = self.create_error_response(msg)
             return render(request, '../templates/qa_reports.html', response)
         # Set the layers geodataframe
@@ -116,7 +116,7 @@ class CheckQualityLine(View):
         self.ppf_list = self.get_ppf_list()
         # Create dict with the only points that are founded and PPF
         self.founded_points_dict = self.get_founded_points_dict()
-        # Get a dict with the points ID and them coordinates
+        # Get a dict with the points ID and their coordinates
         self.points_coords_dict = self.get_round_point_coordinates()
         # Get a list with the line coordinates
         self.line_coords_list = self.get_round_line_coordinates()
@@ -142,7 +142,8 @@ class CheckQualityLine(View):
         # Check that an auxiliary point has correctly indicated its real point's ID
         self.check_aux_id()
         # Check some aspects about founded points
-        self.check_found_points()
+        if self.founded_points_dict:   # Check if exists any founded point
+            self.check_found_points()
         # Check that the 3T points are informed correctly
         self.check_3termes()
         # Check the relation between the tables and the point layer
@@ -180,7 +181,7 @@ class CheckQualityLine(View):
         log_format = logging.Formatter("%(levelname)s - %(message)s")
         # Log filename and path
         log_name = f"QA-Report_{self.line_id_txt}_{self.current_date}.txt"
-        self.log_path = path.join(LOG_DIR, log_name)
+        self.log_path = path.join(LINES_DIR, self.line_id, WORK_REC_DIR, log_name)
         if path.exists(self.log_path):   # If a log with the same filename exists, removes it
             os.remove(self.log_path)
         file_handler = logging.FileHandler(filename=self.log_path, mode='w')
@@ -291,10 +292,11 @@ class CheckQualityLine(View):
             shape_name = shape.split('.')[0]
             shape_path = os.path.join(self.carto_folder, shape)
             try:
-                shape_gdf = gpd.read_file(shape_path).set_crs(epsg=25831)
+                #shape_gdf = gpd.read_file(shape_path).set_crs(epsg=25831)
+                shape_gdf = gpd.read_file(shape_path)
                 shape_gdf.to_file(WORK_GPKG, layer=shape_name, driver="GPKG")
-            except:
-                self.logger.error(f"No s'ha pogut copiar la capa {shape_name}")
+            except Exception as e:
+                self.logger.error(f"No s'ha pogut copiar la capa {shape_name} => {e}.")
                 return False
 
         for dbf in TABLE_LIST:
@@ -303,8 +305,8 @@ class CheckQualityLine(View):
             try:
                 dbf_gdf = gpd.read_file(dbf_path)
                 dbf_gdf.to_file(WORK_GPKG, layer=dbf_name, driver="GPKG")
-            except:
-                self.logger.error(f"No s'ha pogut copiar la taula {dbf_name}")
+            except Exception as e:
+                self.logger.error(f"No s'ha pogut copiar la taula {dbf_name} => {e}")
                 return False
 
         self.logger.info(f"Capes i taules de la linia {self.line_id} copiades correctament a CQline.gpkg")
@@ -316,23 +318,23 @@ class CheckQualityLine(View):
         line_id_in_fita_g = False
 
         # Check into lin_tram_mem
-        tram_duplicated_id = self.tram_line_mem_gdf['id_linia'] == self.line_id
+        tram_duplicated_id = self.tram_line_mem_gdf['id_linia'] == int(self.line_id)
         tram_line_id = self.tram_line_mem_gdf[tram_duplicated_id]
         if not tram_line_id.empty:
             line_id_in_lin_tram = True
 
         # Check into fita_mem
-        fita_duplicated_id = self.fita_mem_gdf['id_linia'] == self.line_id
+        fita_duplicated_id = self.fita_mem_gdf['id_linia'] == int(self.line_id)
         fita_line_id = self.fita_mem_gdf[fita_duplicated_id]
         if not fita_line_id.empty:
             line_id_in_fita_g = True
 
         if line_id_in_fita_g and line_id_in_lin_tram:
-            self.logger.error("L'ID Linia introduït està en FitaG i Lin_Tram_Proposta")
+            self.logger.error("L'ID Linia introduït està en fita_mem i tram_linia_mem")
         elif line_id_in_fita_g and not line_id_in_lin_tram:
-            self.logger.error("L'ID Linia introduït està en FitaG però no en Lin_Tram_Proposta")
+            self.logger.error("L'ID Linia introduït està en fita_mem però no en lin_tram_mem")
         elif not line_id_in_fita_g and line_id_in_lin_tram:
-            self.logger.error("L'ID Linia introduït no està en FitaG però sí en Lin_Tram_Proposta")
+            self.logger.error("L'ID Linia introduït no està en fita_mem però sí en lin_tram_mem")
         elif not line_id_in_fita_g and not line_id_in_lin_tram:
             self.logger.info("L'ID Linia no està repetit a fita_mem i lin_tram_mem de SIDM3")
 
@@ -350,7 +352,7 @@ class CheckQualityLine(View):
     def check_fields_lin_tram_ppta(self):
         """Check line's layer's field structure is correct"""
         # Fields that the line's layer must have
-        true_fields = ('OBJECTID', 'ID_LINIA', 'ID', 'DATA', 'COMENTARI', 'P1', 'P2', 'P3', 'P4', 'PF',
+        true_fields = ('ID_LINIA', 'ID', 'DATA', 'COMENTARI', 'P1', 'P2', 'P3', 'P4', 'PF',
                        'ID_FITA1', 'ID_FITA2', 'geometry')
 
         # Get line's layer's fields
@@ -410,18 +412,22 @@ class CheckQualityLine(View):
     def get_founded_points_dict(self):
         """
         Get a dict of the founded PPF points with etiqueta as key and ID_PUNT as value
-        :return: points_founded_dict - Dict of the founded points with the key, value -> Etiqueta, ID_Punt
+        :return: points_founded_dict - Dict of the founded points with the key, value -> ID_FITA, ID_Punt
         """
         points_founded_dict = {}
         founded = self.punt_fit_df['TROBADA'] == '1'
-        points_founded = self.punt_line_gdf[founded]
-        for index, feature in points_founded.iterrows():
-            if feature['ID_PUNT'] in self.ppf_list:
-                point_id = feature['ID_PUNT']
-                etiqueta = feature['ETIQUETA']
-                points_founded_dict[etiqueta] = point_id
+        points_founded = self.punt_fit_df[founded]
+        if not points_founded.empty:
+            for index, feature in points_founded.iterrows():
+                if feature['ID_PUNT'] in self.ppf_list:
+                    point_id = feature['ID_PUNT']
+                    point_num = feature['ID_FITA']
+                    points_founded_dict[point_num] = point_id
 
-        return points_founded_dict
+            return points_founded_dict
+
+        else:
+            return False
 
     def check_layers_geometry(self):
         """Check the geometry of both line and points"""
@@ -498,16 +504,17 @@ class CheckQualityLine(View):
             is mandatory to avoid using that character in the reports in order to don't lose data adding the messages
             to the JSON.
             '''
-            point_num = feature['ETIQUETA'].split('-')[-1]
-            point_id = feature['ID_PUNT'].split('-')[-1]
-            point_x = feature['geometry'].x
-            point_y = feature['geometry'].y
-            # Check if rounded correctly
-            dif_x = abs(point_x - round(point_x, 1))
-            dif_y = abs(point_y - round(point_y, 1))
-            if dif_x > 0.01 or dif_y > 0.01:
-                decim_valid = False
-                self.logger.error(f"La fita F {point_num}  |  ID_PUNT : {point_id} no està correctament decimetritzada")
+            if feature['ID_PUNT'] in self.ppf_list:   # Check if the point is a ppf point
+                point_num = feature['ETIQUETA'].split('-')[-1]
+                point_id = feature['ID_PUNT'].split('-')[-1]
+                point_x = feature['geometry'].x
+                point_y = feature['geometry'].y
+                # Check if rounded correctly
+                dif_x = abs(point_x - round(point_x, 1))
+                dif_y = abs(point_y - round(point_y, 1))
+                if dif_x > 0.01 or dif_y > 0.01:
+                    decim_valid = False
+                    self.logger.error(f"La fita {point_num}  |  ID_PUNT : {point_id} no està correctament decimetritzada")
 
         if decim_valid:
             self.logger.info('Les fites estan correctament decimetritzades')
@@ -591,7 +598,8 @@ class CheckQualityLine(View):
 
         for aux_id in auxiliary_points_id_list:
             if aux_id not in real_points.values:
-                self.logger.error(f"      La fita auxiliar {aux_id} no té correctament indicat l'ID de la fita real.")
+                aux_id = aux_id.split('-')[-1]
+                self.logger.error(f"      La fita auxiliar amb ID {aux_id} no té correctament indicat l'ID de la fita real.")
 
     def check_found_points(self):
         """
@@ -624,7 +632,7 @@ class CheckQualityLine(View):
             for etiqueta, point_id in founded_points_no_photo.items():
                 etiqueta = etiqueta.split('-')[-1]
                 point_id = point_id.split('-')[-1]
-                self.logger.error(f'      La fita F {etiqueta}  |  ID PUNT : {point_id} és trobada però no té cap fotografia indicada.')
+                self.logger.error(f'      La fita {etiqueta}  |  ID PUNT : {point_id} és trobada però no té cap fotografia indicada.')
 
     def check_photo_name(self):
         """Check that the photography in the layer has the same name as de .JPG file"""
@@ -813,14 +821,15 @@ class CheckQualityLine(View):
         """
         # Check if the point is covered by the line
         for point_id, point_coords in self.points_coords_dict.items():
-            if point_coords not in self.line_coords_list:
-                point = self.punt_fit_df.loc[self.punt_fit_df['ID_PUNT'] == point_id]
-                aux = point['AUX'].values[0]
-                n_fita = point['ID_FITA'].values[0]
-                if aux == 1:
-                    self.logger.info(f'      La F {n_fita} no està a sobre de la linia i és auxiliar.')
-                else:
-                    self.logger.error(f'      La F {n_fita} no està a sobre de la linia i NO és auxiliar.')
+            if point_coords not in self.line_coords_list:   # Check if the point coordinates are not covered by the line
+                if point_id in self.ppf_list:   # Check if the point is a ppf point
+                    point = self.punt_fit_df.loc[self.punt_fit_df['ID_PUNT'] == point_id]
+                    aux = point['AUX'].values[0]
+                    n_fita = point['ID_FITA'].values[0]
+                    if aux == 1:
+                        self.logger.info(f'      La F {n_fita} no està a sobre de la linia i és auxiliar.')
+                    else:
+                        self.logger.error(f'      La F {n_fita} no està a sobre de la linia i NO és auxiliar.')
 
     def get_round_line_coordinates(self):
         """
