@@ -139,8 +139,6 @@ class CheckQualityLine(View):
         self.check_points_decimals()
         # Get info and check the features in P_Proposta
         self.info_p_proposta()
-        # Check that an auxiliary point has correctly indicated its real point's ID
-        self.check_aux_id()
         # Check some aspects about founded points
         if self.founded_points_dict:   # Check if exists any founded point
             self.check_found_points()
@@ -590,17 +588,6 @@ class CheckQualityLine(View):
 
         return valid
 
-    def check_aux_id(self):
-        """Check that an auxiliary point has correctly indicated its real point's ID"""
-        real_points = self.punt_fit_df[self.punt_fit_df['AUX'] == '0']
-        auxiliary_points = self.punt_fit_df[self.punt_fit_df['AUX'] == '1']
-        auxiliary_points_id_list = auxiliary_points['ID_PUNT'].to_list()
-
-        for aux_id in auxiliary_points_id_list:
-            if aux_id not in real_points.values:
-                aux_id = aux_id.split('-')[-1]
-                self.logger.error(f"      La fita auxiliar amb ID {aux_id} no té correctament indicat l'ID de la fita real.")
-
     def check_found_points(self):
         """
         Check diferent things about the founded points, like:
@@ -761,7 +748,7 @@ class CheckQualityLine(View):
 
     def check_line_intersects_db(self):
         """Check that the line doesn't intersects or crosses the database lines"""
-        features_intersects_db = gpd.sjoin(self.lin_tram_ppta_line_gdf, self.tram_line_mem_gdf, op='intersects')
+        features_intersects_db = gpd.sjoin(self.lin_tram_ppta_line_gdf, self.tram_line_mem_gdf, op='contains')
         if not features_intersects_db.empty:
             for index, feature in features_intersects_db.iterrows():
                 self.logger.error(f"      El tram {feature['ID']} de la línia talla algun tram de la base de dades.")
@@ -826,10 +813,11 @@ class CheckQualityLine(View):
                     point = self.punt_fit_df.loc[self.punt_fit_df['ID_PUNT'] == point_id]
                     aux = point['AUX'].values[0]
                     n_fita = point['ID_FITA'].values[0]
-                    if aux == 1:
-                        self.logger.info(f'      La F {n_fita} no està a sobre de la linia i és auxiliar.')
+                    point_id = point_id.split('-')[-1]
+                    if aux == '1':
+                        self.logger.info(f'      La fita F {n_fita} | ID PUNT {point_id} no està a sobre de la linia però és auxiliar.')
                     else:
-                        self.logger.error(f'      La F {n_fita} no està a sobre de la linia i NO és auxiliar.')
+                        self.logger.error(f'      La fita F {n_fita} | ID PUNT {point_id} no està a sobre de la linia i NO és auxiliar.')
 
     def get_round_line_coordinates(self):
         """
