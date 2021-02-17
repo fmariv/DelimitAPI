@@ -8,8 +8,6 @@
 # Version Python: 3.7
 # ----------------------------------------------------------
 
-# TODO arreglar el problema de procesos que cogen el txt del log si no se cierra correctamente el proceso
-
 """
 Quality check of a line ready to upload to the database
 """
@@ -189,8 +187,8 @@ class CheckQualityLine(View):
 
     def check_line_dir_exists(self):
         """
-
-        :return:
+        Check if the line folder exists in the uploading directory
+        :return: boolean that indicates whether the line folder exists or not
         """
         line_folder = os.path.join(UPLOAD_DIR, str(self.line_id))
         if path.exists(line_folder):
@@ -200,7 +198,10 @@ class CheckQualityLine(View):
             return False
 
     def check_directories(self):
-        """Check if the directory tree structure and content is correct"""
+        """
+        Check if the directory tree structure and content is correct
+        :return: boolean that indicates if the line's folder's directory tree is correct or not
+        """
         tree_valid = True
 
         doc_delim = os.path.join(self.line_folder, 'DocDelim')

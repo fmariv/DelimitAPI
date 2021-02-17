@@ -136,7 +136,6 @@ class MunicatDataGenerator(View):
         # Send response. The message's type depends on the success of the process. In that sense, if exists
         # any line ID in a warning-line JSON array it indicates that for some reason, the app could not be able
         # to generate the output folder for that line ID
-        # TODO NOT WORKING
         if 'warning-lines' in self.response_data:
             self.response_data['result'] = 'warning'
             if len(self.response_data['warning-lines']) > 1:
@@ -190,7 +189,6 @@ class MunicatDataGenerator(View):
     def set_municat_data(self, line_id, session_id, mtt_date, mtt_num):
         """
         Extract the data from the input csv file and set it as class parameters
-        :return:
         """
         self.line_id = line_id
         self.session_id = session_id
@@ -200,7 +198,6 @@ class MunicatDataGenerator(View):
     def get_muni_names(self):
         """
         Get the names of the municipis that share de line
-        :return:
         """
         line_id_filter = self.line_id_muni_gdf['IDLINIA'] == int(self.line_id)
         munis_line_id = self.line_id_muni_gdf[line_id_filter]
