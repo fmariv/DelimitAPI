@@ -14,9 +14,10 @@ import os.path as path
 from datetime import datetime
 import logging
 import csv
+import requests
+import json
 
 # Third party imports
-import geopandas as gpd
 from django.views import View
 from django.shortcuts import render, redirect
 from django.contrib import messages
@@ -37,6 +38,8 @@ class LetterGenerator(View):
         """
         # EXTRACT THE DATA
         self.council_data_extraction()
+        messages.success(request, 'OK')
+        return redirect("doc-generator-page")
 
     def council_data_extraction(self):
         """Extract the given councils' data in order to properly generate the letters"""
@@ -51,9 +54,9 @@ class LetterGenerator(View):
             reader = csv.reader(f)
             for row in reader:
                 line_id = int(row[0])
-                link = row[1]
+                url = row[1]
                 municipis = self.get_municipis_names(line_id)
-                # self.short_link()
+                shortened_url = self.short_url(url)
                 # self.get_council_data()
                 # self.write_info()
 
@@ -97,15 +100,52 @@ class LetterGenerator(View):
     @staticmethod
     def get_municipis_names(line_id):
         """
-
-        :param line_id:
-        :return:
+        Get the municipis that share a line
+        :param line_id: ID from the line
+        :return: tuple with the municipis' names
         """
         munis_line_id = INFO_MUNICAT_ID_LINIA[INFO_MUNICAT_ID_LINIA['IDLINIA'] == line_id]
         muni_1 = munis_line_id.NOMMUNI1.iloc[0]
         muni_2 = munis_line_id.NOMMUNI2.iloc[0]
 
         return [muni_1, muni_2]
+
+    @staticmethod
+    def short_url(long_url):
+        """
+        Short the given url in order to avoid problems by it length
+        :param long_url: input data url
+        :return: shortened url after short process
+        """
+        # Headers and link
+        link_request = {
+            "destination": long_url,
+        }
+        request_headers = {
+            "Content-type": "application/json",
+            "apikey": "39cdc377d3b8403bada61f9f1d063f16"
+        }
+        # Request
+        r = requests.post("https://api.rebrandly.com/v1/links",
+                          data=json.dumps(link_request),
+                          headers=request_headers
+                          )
+
+        if r.status_code == requests.codes.ok:
+            short_url = r.json()
+            return short_url["shortUrl"]
+        else:
+            pass
+            # TODO
+            # print("No s'ha pogut generar l'enllaç per la línia {}".format(id_linia))
+
+    def get_council_data(self):
+        """
+
+        :return:
+        """
+        pass
+        # TODO
 
 
 class ResolutionGenerator(View):
