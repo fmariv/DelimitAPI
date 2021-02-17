@@ -125,6 +125,7 @@ class MunicatDataGenerator(View):
                 self.add_munis_names()
                 # Check whether the points' geometry is valid
                 self.check_points_geometry()
+
                 # Export the data as ESRI shapefiles and DXF files
                 self.export_data()
                 # Copy PDF to the output folder
@@ -135,8 +136,8 @@ class MunicatDataGenerator(View):
         # Send response. The message's type depends on the success of the process. In that sense, if exists
         # any line ID in a warning-line JSON array it indicates that for some reason, the app could not be able
         # to generate the output folder for that line ID
-        print(list(self.response_data['warning-lines']))
-        if self.response_data['warning-lines']:
+        # TODO NOT WORKING
+        if 'warning-lines' in self.response_data:
             self.response_data['result'] = 'warning'
             if len(self.response_data['warning-lines']) > 1:
                 messages.warning(request, f"No s'han generat les carpetes per les línies {self.response_data['warning-lines']}")
@@ -175,7 +176,7 @@ class MunicatDataGenerator(View):
 
     def set_layers_gdf(self):
         """Open all the necessary layers as geodataframes with geopandas"""
-        # SIDM2
+        # SIDM3
         self.line_tram_mem_gdf = gpd.read_file(WORK_GPKG, layer='tram_linia_mem')
         self.fita_mem_gdf = gpd.read_file(WORK_GPKG, layer='fita_mem')
         # Table id_linia_muni
@@ -235,8 +236,10 @@ class MunicatDataGenerator(View):
             # Set the new layers's geodataframes
             if geom_type == 'Fita':
                 self.fita_temp_gdf = gpd.read_file(WORK_GPKG, layer=layer_name)
+                self.fita_temp_gdf.crs = {'init': 'epsg:25831'}
             elif geom_type == 'Line_tram':
                 self.line_tram_temp_gdf = gpd.read_file(WORK_GPKG, layer=layer_name)
+                self.line_tram_temp_gdf.crs = {'init': 'epsg:25831'}
 
     def delete_aux(self):
         """Delete auxiliary points from the points layers"""
@@ -260,6 +263,10 @@ class MunicatDataGenerator(View):
         self.line_tram_temp_gdf = self.line_tram_temp_gdf.drop(columns=line_delete_fields)
         self.line_tram_temp_gdf = self.line_tram_temp_gdf.astype({'id_linia': int})
         self.line_tram_temp_gdf = self.line_tram_temp_gdf.rename({'id_linia': 'ID_LINIA'}, axis='columns')
+
+        # Set the CRS again
+        self.fita_temp_gdf.crs = {'init': 'epsg:25831'}
+        self.line_tram_temp_gdf.crs = {'init': 'epsg:25831'}
 
     def dissolve_line(self):
         """Dissolve all the line's tram into a single line"""
@@ -374,7 +381,6 @@ class MunicatDataGenerator(View):
         path_pdf_ed50 = path.join(line_dir, PDF_ED50)
         path_pdf_etrs89 = path.join(line_dir, PDF_ETRS89)
         path_pdf_output = path.join(self.path_output_folder, f'{self.line_id}.pdf')
-
         # Search the path where exists de PDF file
         path_pdf = ''
         pdf_start_filename = f"MTT_{self.line_id}_{self.mtt_date}_{self.mtt_num}_"
@@ -389,6 +395,7 @@ class MunicatDataGenerator(View):
                     if filename.startswith(pdf_start_filename) \
                             and filename.endswith(".pdf"):
                         path_pdf = path.join(dirpath, filename)
+
         if not path_pdf:
             self.logger.error("No s'ha trobat cap PDF a exportar")
             return
