@@ -111,6 +111,30 @@ body {
     margin-right: auto;
     margin-top:30px;
 }
+#document-img {
+    width: 100px;
+    height: 100px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top:30px;
+}
+#council-img {
+    width: 100px;
+    height: 100px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top:30px;
+}
+#dogc-img {
+    width: 100px;
+    height: 100px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top:30px;
+}
 .alert-messages {
     position: fixed;
     z-index: 10;

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title_content %}
+<div class="title-container">
+    <h5 id="title">Generador de documents</h5>
+    <pre id="sub-title">
+        Procés que genera automàticament un conjunt de documents de diferent tipologia, com són cartes pels ajuntaments
+        o resol·lucions per publicar al DOGC
+    </pre>
+</div>
+{% endblock %}
+
+{% block apps_content %}
+<div class="wrap-container">
+    <div class="wrap">
+        <a href="#"><img id="council-img" src="{% static 'static/img/council.png' %}"/></a>
+        <p class="app-title">Cartes pels ajuntaments</p>
+        <p class="app-description">Generar cartes pels Ajuntaments per notificar l'inici d'un expedient.</p>
+    </div>
+    <div class="wrap">
+        <a href=#"><img id="dogc-img" src="{% static 'static/img/dogc.png' %}"/></a>
+        <p class="app-title">Resol·lucions pel DOGC</p>
+        <p class="app-description">Generar les resol·lucions pel DOGC per notificar la finalització d'un Expedient</p>
+    </div>
+</div>
+{% endblock %}

@@ -21,5 +21,6 @@ urlpatterns = [
     re_path(r'^$', DelimitAPI.views.index, name='index'),
     re_path(r'^admin/', admin.site.urls),
     re_path(r'^qa-line/', include('qa_line.urls')),
-    re_path(r'^municat/', include('municat_generator.urls'))
+    re_path(r'^municat/', include('municat_generator.urls')),
+    re_path(r'^doc-generator/', include('doc_generator.urls'))
 ]

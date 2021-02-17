@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import re_path
+from doc_generator.views import render_doc_generator_page
 
 '''
 Class-based views
@@ -7,5 +8,5 @@ Class-based views
 '''
 
 urlpatterns = [
-
+    re_path(r'^$', render_doc_generator_page, name='doc-generator-page')
 ]
