@@ -14,7 +14,7 @@
 {% block apps_content %}
 <div class="wrap-container">
     <div class="wrap">
-        <a href="#"><img id="council-img" src="{% static 'static/img/council.png' %}"/></a>
+        <a href="{% url 'letter-generation' %}"><img id="council-img" src="{% static 'static/img/council.png' %}"/></a>
         <p class="app-title">Cartes pels ajuntaments</p>
         <p class="app-description">Generar cartes pels Ajuntaments per notificar l'inici d'un expedient.</p>
     </div>

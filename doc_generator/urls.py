@@ -1,5 +1,5 @@
 from django.urls import re_path
-from doc_generator.views import render_doc_generator_page
+from doc_generator.views import LetterGenerator, render_doc_generator_page
 
 '''
 Class-based views
@@ -8,5 +8,6 @@ Class-based views
 '''
 
 urlpatterns = [
-    re_path(r'^$', render_doc_generator_page, name='doc-generator-page')
+    re_path(r'^$', render_doc_generator_page, name='doc-generator-page'),
+    re_path(r'^letters/$', LetterGenerator.as_view(), name='letter-generation')
 ]
