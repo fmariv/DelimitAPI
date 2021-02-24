@@ -14,6 +14,7 @@ import os.path as path
 from datetime import datetime
 import logging
 import csv
+import urllib
 import requests
 import json
 
@@ -21,6 +22,7 @@ import json
 from django.views import View
 from django.shortcuts import render, redirect
 from django.contrib import messages
+import pandas as pd
 
 # Local imports
 from doc_generator.config import *
@@ -30,6 +32,17 @@ class LetterGenerator(View):
     """
     Class for generating the letters that the ICGC must send to the council in order to notify the begginig of a expedient
     """
+    # DATA EXTRACTION ------------------------------------
+    # Dataframes
+    info_councils_df = pd.read_csv(INFO_MUNICAT_AJUNTAMENTS)
+    info_municat_df = pd.read_csv(INFO_MUNICAT_DATA)
+    # Variables
+    line_id = None
+    shortened_url = None
+    muni_1 = None
+    muni_2 = None
+    council_1_data = None
+    council_2_data = None
 
     def get(self, request):
         """
@@ -50,17 +63,14 @@ class LetterGenerator(View):
             print('EXISTEIXEN LINKS DUPLICATS')
             return
 
-        with open(INFO_MUNICAT_DATA, 'r') as f:
-            reader = csv.reader(f)
-            for row in reader:
-                line_id = int(row[0])
-                url = row[1]
-                municipis = self.get_municipis_names(line_id)
-                shortened_url = self.short_url(url)
-                # self.get_council_data()
-                # self.write_info()
-
-        # self.copy_csv()
+        for i, feature in self.info_municat_df.iterrows():
+            self.line_id = int(feature[0])
+            url = feature[1]
+            self.get_municipis_names()
+            self.shortened_url = self.short_url(url)
+            self.get_council_data()
+            self.write_info_csv()
+            self.reset_variables()
 
     @staticmethod
     def write_csv_head():
@@ -68,8 +78,7 @@ class LetterGenerator(View):
         with open(INFO_MUNICAT_OUTPUT_DATA, 'w', encoding='utf-8') as f:
             header = [
                 "IDLINIA", "MUNI1", "TRACTAMENT", "SEXE", "NOM1", "COGNOM1-1", "COGNOM1-2", "CARREC1", "NOMENS1",
-                "MUNI2",
-                "NOM2", "COGNOM2-1", "COGNOM2-2", "CARREC2", "NOMENS2", "ENLLAÇ"
+                "MUNI2", "NOM2", "COGNOM2-1", "COGNOM2-2", "CARREC2", "NOMENS2", "ENLLAÇ"
             ]
             writer = csv.writer(f, lineterminator='\n')
             writer.writerow(header)
@@ -97,18 +106,13 @@ class LetterGenerator(View):
 
         return duplicated
 
-    @staticmethod
-    def get_municipis_names(line_id):
+    def get_municipis_names(self):
         """
         Get the municipis that share a line
-        :param line_id: ID from the line
-        :return: tuple with the municipis' names
         """
-        munis_line_id = INFO_MUNICAT_ID_LINIA[INFO_MUNICAT_ID_LINIA['IDLINIA'] == line_id]
-        muni_1 = munis_line_id.NOMMUNI1.iloc[0]
-        muni_2 = munis_line_id.NOMMUNI2.iloc[0]
-
-        return [muni_1, muni_2]
+        munis_line_id = INFO_MUNICAT_ID_LINIA[INFO_MUNICAT_ID_LINIA['IDLINIA'] == self.line_id]
+        self.muni_1 = munis_line_id.NOMMUNI1.iloc[0]
+        self.muni_2 = munis_line_id.NOMMUNI2.iloc[0]
 
     @staticmethod
     def short_url(long_url):
@@ -117,35 +121,70 @@ class LetterGenerator(View):
         :param long_url: input data url
         :return: shortened url after short process
         """
-        # Headers and link
-        link_request = {
-            "destination": long_url,
-        }
-        request_headers = {
-            "Content-type": "application/json",
-            "apikey": "39cdc377d3b8403bada61f9f1d063f16"
-        }
-        # Request
-        r = requests.post("https://api.rebrandly.com/v1/links",
-                          data=json.dumps(link_request),
-                          headers=request_headers
-                          )
+        key = '8937dcbd67d56fcf61c45153173da9122e888'
+        url = urllib.parse.quote(long_url)
+        r = requests.get('http://cutt.ly/api/api.php?key={}&short={}'.format(key, url))
 
         if r.status_code == requests.codes.ok:
-            short_url = r.json()
-            return short_url["shortUrl"]
+            response = r.json()
+            shortened_url = response['url']['shortLink']
+            return shortened_url
         else:
-            pass
+            print('Error escurçant link')
             # TODO
-            # print("No s'ha pogut generar l'enllaç per la línia {}".format(id_linia))
+            pass
 
     def get_council_data(self):
         """
-
-        :return:
+        Get the necessary council's data and wraps it
         """
-        pass
-        # TODO
+        # First municipi's data
+        muni_1_council_data = self.info_councils_df[self.info_councils_df['MUNICIPI'] == self.muni_1]
+        tractament_1 = muni_1_council_data.iloc[0]['TRACTAMENT']
+        gender_1 = muni_1_council_data.iloc[0]['SEXE']
+        name_major_1 = muni_1_council_data.iloc[0]['NOM']
+        surname_1_major_1 = muni_1_council_data.iloc[0]['COGNOM1']
+        surname_2_major_1 = muni_1_council_data.iloc[0]['COGNOM2']
+        carrec_1 = muni_1_council_data.iloc[0]['CARREC'].split()[0]   # .split() in order to obtain 'Alcalde' / 'Alcaldessa'
+        nomens_1 = muni_1_council_data.iloc[0]['NOMENS']
+
+        # Second municipi's data
+        muni_2_council_data = self.info_councils_df[self.info_councils_df['MUNICIPI'] == self.muni_2]
+        tractament_2 = muni_2_council_data.iloc[0]['TRACTAMENT']
+        gender_2 = muni_2_council_data.iloc[0]['SEXE']
+        name_major_2 = muni_2_council_data.iloc[0]['NOM']
+        surname_1_major_2 = muni_2_council_data.iloc[0]['COGNOM1']
+        surname_2_major_2 = muni_2_council_data.iloc[0]['COGNOM2']
+        carrec_2 = muni_2_council_data.iloc[0]['CARREC'].split()[0]  # .split() in order to obtain 'Alcalde' / 'Alcaldessa'
+        nomens_2 = muni_2_council_data.iloc[0]['NOMENS']
+
+        if name_major_1 and name_major_2:   # Check that all the data is filled and wraps it
+            self.council_1_data = [self.line_id, self.muni_1, tractament_1, gender_1, name_major_1, surname_1_major_1,
+                                   surname_2_major_1, carrec_1, nomens_1, self.muni_2, name_major_2, surname_1_major_2,
+                                   surname_2_major_2, carrec_2, nomens_2, self.shortened_url]
+            self.council_2_data = [self.line_id, self.muni_2, tractament_2, gender_2, name_major_2, surname_1_major_2,
+                                   surname_2_major_2, carrec_2, nomens_2, self.muni_1, name_major_1, surname_1_major_1,
+                                   surname_2_major_1, carrec_1, nomens_1, self.shortened_url]
+
+    def write_info_csv(self):
+        """
+        Write the council's data into the output csv
+        """
+        with open(INFO_MUNICAT_OUTPUT_DATA, 'a') as f:
+            writer = csv.writer(f, lineterminator='\n')
+            writer.writerow(self.council_1_data)
+            writer.writerow(self.council_2_data)
+
+    def reset_variables(self):
+        """
+        Reset all the line variables and council's data to None
+        """
+        self.line_id = None
+        self.shortened_url = None
+        self.muni_1 = None
+        self.muni_2 = None
+        self.council_1_data = None
+        self.council_2_data = None
 
 
 class ResolutionGenerator(View):
