@@ -4,7 +4,7 @@
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Fran Martin
 # Version: 0.1
-# Date: 20210217
+# Date: 20210224
 # Version Python: 3.7
 # ----------------------------------------------------------
 
@@ -16,13 +16,14 @@ import logging
 import csv
 import urllib
 import requests
-import json
 
 # Third party imports
 from django.views import View
 from django.shortcuts import render, redirect
 from django.contrib import messages
 import pandas as pd
+import comtypes.client
+from mailmerge import MailMerge
 
 # Local imports
 from doc_generator.config import *
@@ -31,11 +32,12 @@ from doc_generator.config import *
 class LetterGenerator(View):
     """
     Class for generating the letters that the ICGC must send to the council in order to notify the begginig of a expedient
+    # TODO split into 3 classes: extractor, generate doc and generate pdf
     """
     # DATA EXTRACTION ------------------------------------
     # Dataframes
     info_councils_df = pd.read_csv(INFO_MUNICAT_AJUNTAMENTS)
-    info_municat_df = pd.read_csv(INFO_MUNICAT_DATA)
+    info_line_id_df = pd.read_csv(INFO_MUNICAT_DATA)
     # Variables
     line_id = None
     shortened_url = None
@@ -63,7 +65,7 @@ class LetterGenerator(View):
             print('EXISTEIXEN LINKS DUPLICATS')
             return
 
-        for i, feature in self.info_municat_df.iterrows():
+        for i, feature in self.info_line_id_df.iterrows():
             self.line_id = int(feature[0])
             url = feature[1]
             self.get_municipis_names()
@@ -170,7 +172,7 @@ class LetterGenerator(View):
         """
         Write the council's data into the output csv
         """
-        with open(INFO_MUNICAT_OUTPUT_DATA, 'a') as f:
+        with open(INFO_MUNICAT_OUTPUT_DATA, 'a', encoding='utf-8') as f:
             writer = csv.writer(f, lineterminator='\n')
             writer.writerow(self.council_1_data)
             writer.writerow(self.council_2_data)
@@ -185,6 +187,85 @@ class LetterGenerator(View):
         self.muni_2 = None
         self.council_1_data = None
         self.council_2_data = None
+
+
+def generate_letters_doc(self):
+    """
+
+    :return:
+    """
+    info_municat_df = pd.read_csv(INFO_MUNICAT_OUTPUT_DATA)
+    doc = MailMerge(TEMPLATE)
+    for i, feature in info_municat_df.iterrows():
+        short_line_id = feature.iloc[0]['IDLINIA']
+        line_id = self.line_id_2_txt(short_line_id)
+        muni_1 = feature.iloc[0]['MUNI1']
+        tractament = feature.iloc[0]['TRACTAMENT']
+        sexe = feature.iloc[0]['SEXE']
+        nom = feature.iloc[0]['NOM1']
+        cognom_1 = feature.iloc[0]['COGNOM-1']
+        cognom_2 = feature.iloc[0]['COGNOM-2']
+        carrec = feature.iloc[0]['CARREC1']
+        nomens = feature.iloc[0]['NOMENS1']
+        salutacio = CASOS_SALUTACIO[sexe]
+        muni_2 = feature.iloc[0]['MUNI2']
+        url = feature.iloc[0]['ENLLAÇ']
+
+        doc.merge(
+            Tractament=tractament,
+            Nom=nom,
+            Cognom1=cognom_1,
+            Cognom2=cognom_2,
+            Carrec=carrec,
+            nomens=nomens,
+            XXXX=line_id,
+            Salutacio=salutacio,
+            Municipi2=muni_2,
+            Link=url
+        )
+
+        doc_output_path = os.path.join(AUTO_CARTA_OUTPUT_DOC, f'{line_id}_ofici tramesa replantejament_{muni_1}.docx')
+        doc.write(doc_output_path)
+
+
+def generate_letters_pdf():
+    """
+
+    :return:
+    """
+    for f in os.listdir(AUTO_CARTA_OUTPUT_DOC):
+        # Font -> https://stackoverflow.com/questions/6011115/doc-to-pdf-using-python
+        in_file = os.path.join(AUTO_CARTA_OUTPUT_DOC, f)
+        out_file = os.path.join(AUTO_CARTA_OUTPUT_DOC, f.replace("docx", "pdf"))
+
+        wdFormatPDF = 17
+
+        in_file = os.path.abspath(in_file)
+        out_file = os.path.abspath(out_file)
+
+        word = comtypes.client.CreateObject('Word.Application')
+        doc = word.Documents.Open(in_file)
+        doc.SaveAs(out_file, FileFormat=wdFormatPDF)
+        doc.Close()
+        word.Quit()
+
+
+def line_id_2_txt(line_id):
+    """
+    Convert line id (integer) to string nnnn
+    :return: line_id_txt -> <string> ID de la linia introduit en format text
+    """
+    line_id_str = str(line_id)
+    if len(line_id_str) == 1:
+        line_id_txt = "000" + line_id_str
+    elif len(line_id_str) == 2:
+        line_id_txt = "00" + line_id_str
+    elif len(line_id_str) == 3:
+        line_id_txt = "0" + line_id_str
+    else:
+        line_id_txt = line_id_str
+
+    return line_id_txt
 
 
 class ResolutionGenerator(View):
