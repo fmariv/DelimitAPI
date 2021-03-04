@@ -87,6 +87,12 @@ body {
     height: 80%;
     overflow: auto;
 }
+.letter-form-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2%;
+}
 .error-message {
     color: red;
 }

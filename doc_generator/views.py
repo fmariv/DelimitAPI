@@ -3,19 +3,19 @@
 # ----------------------------------------------------------
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Fran Martin
-# Version: 0.1
-# Date: 20210224
+# Version: 0.2
+# Date: 20210304
 # Version Python: 3.7
 # ----------------------------------------------------------
 
 # Standard library imports
 import os
-import os.path as path
 from datetime import datetime
 import logging
 import csv
 import urllib
 import requests
+import pythoncom
 
 # Third party imports
 from django.views import View
@@ -29,12 +29,10 @@ from mailmerge import MailMerge
 from doc_generator.config import *
 
 
-class LetterGenerator(View):
+class MunicatDataExtractor(View):
     """
     Class for generating the letters that the ICGC must send to the council in order to notify the begginig of a expedient
-    # TODO split into 3 classes: extractor, generate doc and generate pdf
     """
-    # DATA EXTRACTION ------------------------------------
     # Dataframes
     info_councils_df = pd.read_csv(INFO_MUNICAT_AJUNTAMENTS)
     info_line_id_df = pd.read_csv(INFO_MUNICAT_DATA)
@@ -48,22 +46,15 @@ class LetterGenerator(View):
 
     def get(self, request):
         """
-        Main entry point. This method is called when someone wants to init the process of generating the
-        councils' letters.
+        Main entry point. This method is called when someone wants to init the process of extracting the
+        councils' data.
         """
-        # EXTRACT THE DATA
-        self.council_data_extraction()
-        messages.success(request, 'OK')
-        return redirect("doc-generator-page")
+        self.write_csv_head()  # Write CSV header
 
-    def council_data_extraction(self):
-        """Extract the given councils' data in order to properly generate the letters"""
-        self.write_csv_head()   # Write CSV header
-        duplicated_links = self.check_duplicated_links()   # Check if exists any duplicated link into the input data
-
+        '''duplicated_links = self.check_duplicated_links()  # Check if exists any duplicated link into the input data
         if duplicated_links:
-            print('EXISTEIXEN LINKS DUPLICATS')
-            return
+            messages.error(request, "Existeixen links duplicats al csv d'entrada de dades")
+            return redirect("letter-generator-page")'''
 
         for i, feature in self.info_line_id_df.iterrows():
             self.line_id = int(feature[0])
@@ -73,6 +64,9 @@ class LetterGenerator(View):
             self.get_council_data()
             self.write_info_csv()
             self.reset_variables()
+
+        messages.success(request, 'Informació del Municat extreta correctament')
+        return redirect("letter-generator-page")
 
     @staticmethod
     def write_csv_head():
@@ -189,7 +183,7 @@ class LetterGenerator(View):
         self.council_2_data = None
 
 
-def generate_letters_doc(self):
+def generate_letters_doc(request):
     """
 
     :return:
@@ -197,42 +191,50 @@ def generate_letters_doc(self):
     info_municat_df = pd.read_csv(INFO_MUNICAT_OUTPUT_DATA)
     doc = MailMerge(TEMPLATE)
     for i, feature in info_municat_df.iterrows():
-        short_line_id = feature.iloc[0]['IDLINIA']
-        line_id = self.line_id_2_txt(short_line_id)
-        muni_1 = feature.iloc[0]['MUNI1']
-        tractament = feature.iloc[0]['TRACTAMENT']
-        sexe = feature.iloc[0]['SEXE']
-        nom = feature.iloc[0]['NOM1']
-        cognom_1 = feature.iloc[0]['COGNOM-1']
-        cognom_2 = feature.iloc[0]['COGNOM-2']
-        carrec = feature.iloc[0]['CARREC1']
-        nomens = feature.iloc[0]['NOMENS1']
+        short_line_id = feature['IDLINIA']
+        line_id = line_id_2_txt(short_line_id)
+        muni_1 = feature['MUNI1']
+        tractament = feature['TRACTAMENT']
+        sexe = feature['SEXE']
+        nom = feature['NOM1']
+        cognom_1 = feature['COGNOM1-1']
+        cognom_2 = feature['COGNOM1-2']
+        carrec = feature['CARREC1']
+        nomens = feature['NOMENS1']
         salutacio = CASOS_SALUTACIO[sexe]
-        muni_2 = feature.iloc[0]['MUNI2']
-        url = feature.iloc[0]['ENLLAÇ']
+        muni_2 = feature['MUNI2']
+        url = feature['ENLLAÇ']
 
-        doc.merge(
-            Tractament=tractament,
-            Nom=nom,
-            Cognom1=cognom_1,
-            Cognom2=cognom_2,
-            Carrec=carrec,
-            nomens=nomens,
-            XXXX=line_id,
-            Salutacio=salutacio,
-            Municipi2=muni_2,
-            Link=url
-        )
+        try:
+            doc.merge(
+                Tractament=tractament,
+                Nom=nom,
+                Cognom1=cognom_1,
+                Cognom2=cognom_2,
+                Carrec=carrec,
+                nomens=nomens,
+                XXXX=line_id,
+                Salutacio=salutacio,
+                Municipi2=muni_2,
+                Link=url
+            )
 
-        doc_output_path = os.path.join(AUTO_CARTA_OUTPUT_DOC, f'{line_id}_ofici tramesa replantejament_{muni_1}.docx')
-        doc.write(doc_output_path)
+            doc_output_path = os.path.join(AUTO_CARTA_OUTPUT_DOC, f'{line_id}_ofici tramesa replantejament_{muni_1}.docx')
+            doc.write(doc_output_path)
+        except Exception as e:
+            messages.error(request, f'Error generant les cartes en format docx: {e}')
+            return redirect("letter-generator-page")
+
+    messages.success(request, 'Cartes generades correctament en format docx')
+    return redirect("letter-generator-page")
 
 
-def generate_letters_pdf():
+def generate_letters_pdf(request):
     """
 
     :return:
     """
+    # TODO FIX
     for f in os.listdir(AUTO_CARTA_OUTPUT_DOC):
         # Font -> https://stackoverflow.com/questions/6011115/doc-to-pdf-using-python
         in_file = os.path.join(AUTO_CARTA_OUTPUT_DOC, f)
@@ -243,11 +245,18 @@ def generate_letters_pdf():
         in_file = os.path.abspath(in_file)
         out_file = os.path.abspath(out_file)
 
-        word = comtypes.client.CreateObject('Word.Application')
-        doc = word.Documents.Open(in_file)
-        doc.SaveAs(out_file, FileFormat=wdFormatPDF)
-        doc.Close()
-        word.Quit()
+        try:
+            word = comtypes.client.CreateObject('Word.Application')
+            doc = word.Documents.Open(in_file)
+            doc.SaveAs(out_file, FileFormat=wdFormatPDF)
+            doc.Close()
+            word.Quit()
+        except Exception as e:
+            messages.error(request, f'Error generant les cartes en format pdf: {e}')
+            return redirect("letter-generator-page")
+
+    messages.success(request, 'Cartes generades correctament en format pdf')
+    return redirect("letter-generator-page")
 
 
 def line_id_2_txt(line_id):
@@ -277,7 +286,16 @@ class ResolutionGenerator(View):
 def render_doc_generator_page(request):
     """
     Render the same doc generator page itself
-    :param request: Rendering of the qa page
+    :param request: Rendering of the doc generator page
     :return:
     """
     return render(request, '../templates/doc_generator_page.html')
+
+
+def render_letter_generator_page(request):
+    """
+    Render the letter generator page
+    :param request: Rendering of the letter generator page
+    :return:
+    """
+    return render(request, '../templates/letter_generator_page.html')

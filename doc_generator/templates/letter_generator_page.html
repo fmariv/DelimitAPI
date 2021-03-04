@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title_content %}
+<div class="title-container">
+    <h5 id="title">Cartes pels ajuntaments</h5>
+    <pre id="sub-title">
+        Procés per generar cartes pels Ajuntaments per notificar l'inici d'un expedient. És important assenyalar que de vegades pot ser
+        necessari no executar tots els processos descrits a sota: pot ser que a vegades només es vulgui extreure informació del Municat,
+        o transformar les cartes de format docx de Word a pdf.
+    </pre>
+</div>
+{% endblock %}
+
+{% block apps_content %}
+<div class="letter-form-container">
+    <form action="{% url 'municat-data-extraction' %}">
+        <button type="submit" class="btn btn-primary mb-2">Extreure informació del Municat</button>
+    </form>
+    <form action="{% url 'doc-letter-generation' %}">
+        <button type="submit" class="btn btn-primary mb-2">Generar cartes en docx</button>
+    </form>
+    <form action="{% url 'pdf-letter-generation' %}">
+        <button type="submit" class="btn btn-primary mb-2">Generar cartes en pdf</button>
+    </form>
+</div>
+<div class="alert-messages">
+        {% include 'messages.html' %}
+</div>
+{% endblock %}
