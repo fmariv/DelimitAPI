@@ -15,7 +15,7 @@ import logging
 import csv
 import urllib
 import requests
-import pythoncom
+
 
 # Third party imports
 from django.views import View
@@ -23,6 +23,7 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 import pandas as pd
 import comtypes.client
+import pythoncom
 from mailmerge import MailMerge
 
 # Local imports
@@ -234,16 +235,14 @@ def generate_letters_pdf(request):
 
     :return:
     """
-    # TODO FIX
+    pythoncom.CoInitialize()
+
     for f in os.listdir(AUTO_CARTA_OUTPUT_DOC):
         # Font -> https://stackoverflow.com/questions/6011115/doc-to-pdf-using-python
         in_file = os.path.join(AUTO_CARTA_OUTPUT_DOC, f)
-        out_file = os.path.join(AUTO_CARTA_OUTPUT_DOC, f.replace("docx", "pdf"))
+        out_file = os.path.join(AUTO_CARTA_OUTPUT_PDF, f.replace("docx", "pdf"))
 
         wdFormatPDF = 17
-
-        in_file = os.path.abspath(in_file)
-        out_file = os.path.abspath(out_file)
 
         try:
             word = comtypes.client.CreateObject('Word.Application')
