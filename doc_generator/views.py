@@ -191,8 +191,9 @@ class MunicatDataExtractor(View):
 
 def generate_letters_doc(request):
     """
-
-    :return:
+    Generate all the letters in docx format
+    :param request: Http request
+    :return: redirect to the letter generator page
     """
     info_municat_df = pd.read_csv(INFO_MUNICAT_OUTPUT_DATA)
     doc = MailMerge(TEMPLATE)
@@ -237,8 +238,9 @@ def generate_letters_doc(request):
 
 def generate_letters_pdf(request):
     """
-
-    :return:
+    Convert all the docx files into pdf files
+    :param request: Http request
+    :return: redirect to the letter generator page
     """
     pythoncom.CoInitialize()
 
@@ -268,6 +270,7 @@ def line_id_2_txt(line_id):
     Convert line id (integer) to string nnnn
     :return: line_id_txt -> <string> ID de la linia introduit en format text
     """
+    # TODO create as common function
     line_id_str = str(line_id)
     if len(line_id_str) == 1:
         line_id_txt = "000" + line_id_str
@@ -291,8 +294,8 @@ class ResolutionGenerator(View):
 def render_doc_generator_page(request):
     """
     Render the same doc generator page itself
-    :param request: Rendering of the doc generator page
-    :return:
+    :param request: Http request
+    :return: render -> Rendering of the doc generator page
     """
     return render(request, '../templates/doc_generator_page.html')
 
@@ -300,7 +303,7 @@ def render_doc_generator_page(request):
 def render_letter_generator_page(request):
     """
     Render the letter generator page
-    :param request: Rendering of the letter generator page
-    :return:
+    :param request: Http request
+    :return: render -> Rendering of the letter generator page
     """
     return render(request, '../templates/letter_generator_page.html')
