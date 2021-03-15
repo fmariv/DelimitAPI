@@ -3,8 +3,8 @@
 # ----------------------------------------------------------
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Cesc Masdeu & Fran Martin
-# Version: 0.1
-# Date: 20210115
+# Version: 1.0
+# Date: 20210315
 # Version Python: 3.7
 # ----------------------------------------------------------
 
@@ -30,6 +30,7 @@ from django.contrib import messages
 
 # Local imports
 from municat_generator.config import *
+from DelimitAPI.common.utils import line_id_2_txt
 
 
 class MunicatDataGenerator(View):
@@ -325,7 +326,7 @@ class MunicatDataGenerator(View):
                 os.mkdir(path_)
 
         # Line ID as txt
-        line_id_txt = self.line_id_2_txt()
+        line_id_txt = line_id_2_txt(self.line_id)
 
         # Normalize municipis names to avoid encoding problems
         muni_1_normalized = self.muni_1.replace(' ', '_')
@@ -352,23 +353,6 @@ class MunicatDataGenerator(View):
 
         # Delete working folder
         shutil.rmtree(path_output_zip)
-
-    def line_id_2_txt(self):
-        """
-        Convert the line ID from integer to text, adding 0 if necessary in order to have a code with 4 characters.
-        :return: line_id_txt -> line ID converted into string with 4 characters.
-        """
-        line_id_str = str(self.line_id)
-        if len(line_id_str) == 1:
-            line_id_txt = "000" + line_id_str
-        elif len(line_id_str) == 2:
-            line_id_txt = "00" + line_id_str
-        elif len(line_id_str) == 3:
-            line_id_txt = "0" + line_id_str
-        else:
-            line_id_txt = line_id_str
-
-        return line_id_txt
 
     def copy_pdf(self):
         """

@@ -1,4 +1,4 @@
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from osgeo import gdal
 from qa_line.config import *
 from fiona import listlayers

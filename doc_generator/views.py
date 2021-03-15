@@ -3,19 +3,16 @@
 # ----------------------------------------------------------
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Fran Martin
-# Version: 0.2
-# Date: 20210304
+# Version: 1.0
+# Date: 20210315
 # Version Python: 3.7
 # ----------------------------------------------------------
 
 # Standard library imports
 import os
-from datetime import datetime
-import logging
 import csv
 import urllib
 import requests
-
 
 # Third party imports
 from django.views import View
@@ -28,6 +25,7 @@ from mailmerge import MailMerge
 
 # Local imports
 from doc_generator.config import *
+from DelimitAPI.common.utils import line_id_2_txt
 
 
 class MunicatDataExtractor(View):
@@ -263,25 +261,6 @@ def generate_letters_pdf(request):
 
     messages.success(request, 'Cartes generades correctament en format pdf')
     return redirect("letter-generator-page")
-
-
-def line_id_2_txt(line_id):
-    """
-    Convert line id (integer) to string nnnn
-    :return: line_id_txt -> <string> ID de la linia introduit en format text
-    """
-    # TODO create as common function
-    line_id_str = str(line_id)
-    if len(line_id_str) == 1:
-        line_id_txt = "000" + line_id_str
-    elif len(line_id_str) == 2:
-        line_id_txt = "00" + line_id_str
-    elif len(line_id_str) == 3:
-        line_id_txt = "0" + line_id_str
-    else:
-        line_id_txt = line_id_str
-
-    return line_id_txt
 
 
 class ResolutionGenerator(View):

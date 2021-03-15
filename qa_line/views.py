@@ -3,8 +3,8 @@
 # ----------------------------------------------------------
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Cesc Masdeu & Fran Martin
-# Version: 0.1
-# Date: 20210209
+# Version: 1.0
+# Date: 20210315
 # Version Python: 3.7
 # ----------------------------------------------------------
 
@@ -28,6 +28,7 @@ from django.contrib import messages
 
 # Local imports
 from qa_line.config import *
+from DelimitAPI.common.utils import line_id_2_txt
 
 
 class CheckQualityLine(View):
@@ -162,7 +163,7 @@ class CheckQualityLine(View):
         # Set line ID
         self.line_id = line_id
         # Convert line ID from integer to string nnnn
-        self.line_id_txt = self.line_id_2_txt()
+        self.line_id_txt = line_id_2_txt(self.line_id)
         # Configure logger
         self.set_logging_config()
         # Write first log message
@@ -178,7 +179,8 @@ class CheckQualityLine(View):
         log_format = logging.Formatter("%(levelname)s - %(message)s")
         # Log filename and path
         log_name = f"QA-Report_{self.line_id_txt}_{self.current_date}.txt"
-        self.log_path = path.join(LINES_DIR, self.line_id, WORK_REC_DIR, log_name)
+        #self.log_path = path.join(LINES_DIR, self.line_id, WORK_REC_DIR, log_name)
+        self.log_path = path.join(LOG_DIR, log_name)
         if path.exists(self.log_path):   # If a log with the same filename exists, removes it
             os.remove(self.log_path)
         file_handler = logging.FileHandler(filename=self.log_path, mode='w')
@@ -237,23 +239,6 @@ class CheckQualityLine(View):
         self.p_proposta_df = gpd.read_file(WORK_GPKG, layer='P_Proposta')
         self.punt_fit_df = gpd.read_file(WORK_GPKG, layer='PUNT_FIT')
 
-    def line_id_2_txt(self):
-        """
-        Convert line id (integer) to string nnnn
-        :return: line_id_txt -> <string> ID de la linia introduit en format text
-        """
-        line_id_str = str(self.line_id)
-        if len(line_id_str) == 1:
-            line_id_txt = "000" + line_id_str
-        elif len(line_id_str) == 2:
-            line_id_txt = "00" + line_id_str
-        elif len(line_id_str) == 3:
-            line_id_txt = "0" + line_id_str
-        else:
-            line_id_txt = line_id_str
-
-        return line_id_txt
-
     def check_entities_exist(self):
         """
         Check if all the necessary shapefiles and tables exists
@@ -292,7 +277,6 @@ class CheckQualityLine(View):
             shape_name = shape.split('.')[0]
             shape_path = os.path.join(self.carto_folder, shape)
             try:
-                #shape_gdf = gpd.read_file(shape_path).set_crs(epsg=25831)
                 shape_gdf = gpd.read_file(shape_path)
                 shape_gdf.to_file(WORK_GPKG, layer=shape_name, driver="GPKG")
             except Exception as e:
@@ -682,9 +666,9 @@ class CheckQualityLine(View):
         ppf_point = sorted_points_df['ID_PUNT'].isin(self.ppf_list)
         sorted_points_df = sorted_points_df[ppf_point]
         # Get a list with the contact field from both first and last point
-        # TODO comprovar que si una fita inicial o final tiene auxiliar, que ambas tengan el campo contacto llenado
         first_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[0]
         last_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[-1]
+        print(sorted_points_df_temp, first_point, last_point)
         if first_point['CONTACTE'] and last_point['CONTACTE']:
             self.logger.info('Les fites 3T tenen informat el camp CONTACTE.')
         else:
