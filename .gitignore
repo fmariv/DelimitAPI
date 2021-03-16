@@ -12,3 +12,6 @@ municat_generator/config.py
 .env
 # staticfiles
 staticfiles/
+# Pycharm .idea
+.idea/
+run-config.txt

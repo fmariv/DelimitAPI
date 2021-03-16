@@ -33,9 +33,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = str(os.getenv('SECRET_KEY'))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['darling.icgc.local', 'localhost']
+#ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -139,8 +140,8 @@ USE_TZ = True
 STATIC_ROOT = BASE_DIR / 'staticfiles/'
 
 # The URL to use when referring to static files (where they will be served from)
-# STATIC_URL = str(os.getenv('STATIC_URL'))
-STATIC_URL = 'static/'
+STATIC_URL = str(os.getenv('STATIC_URL'))
+#STATIC_URL = 'static/'
 
 STATICFILES_DIRS = [
     BASE_DIR / 'var/www/'

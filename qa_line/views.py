@@ -179,8 +179,7 @@ class CheckQualityLine(View):
         log_format = logging.Formatter("%(levelname)s - %(message)s")
         # Log filename and path
         log_name = f"QA-Report_{self.line_id_txt}_{self.current_date}.txt"
-        #self.log_path = path.join(LINES_DIR, self.line_id, WORK_REC_DIR, log_name)
-        self.log_path = path.join(LOG_DIR, log_name)
+        self.log_path = path.join(LINES_DIR, self.line_id, WORK_REC_DIR, log_name)
         if path.exists(self.log_path):   # If a log with the same filename exists, removes it
             os.remove(self.log_path)
         file_handler = logging.FileHandler(filename=self.log_path, mode='w')
@@ -668,7 +667,6 @@ class CheckQualityLine(View):
         # Get a list with the contact field from both first and last point
         first_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[0]
         last_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[-1]
-        print(sorted_points_df_temp, first_point, last_point)
         if first_point['CONTACTE'] and last_point['CONTACTE']:
             self.logger.info('Les fites 3T tenen informat el camp CONTACTE.')
         else:
