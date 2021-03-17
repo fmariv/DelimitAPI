@@ -2,16 +2,15 @@
 db/
 # Reports
 reports/
-# qa line config.py
+## CONFIG files
 qa_line/config.py
-# doc generator config.py
 doc_generator/config.py
-# municat generator config.py
 municat_generator/config.py
+run-config.txt
+DelimitAPI/settings.py
 # .env
 .env
 # staticfiles
 staticfiles/
 # Pycharm .idea
 .idea/
-run-config.txt

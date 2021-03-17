@@ -22,10 +22,14 @@ import pandas as pd
 import comtypes.client
 import pythoncom
 from mailmerge import MailMerge
+from dotenv import load_dotenv
 
 # Local imports
 from doc_generator.config import *
 from DelimitAPI.common.utils import line_id_2_txt
+
+# Load dotenv in order to protect secret information
+load_dotenv()
 
 
 class MunicatDataExtractor(View):
@@ -122,7 +126,7 @@ class MunicatDataExtractor(View):
         :param long_url: input data url
         :return: shortened url after short process
         """
-        key = '8937dcbd67d56fcf61c45153173da9122e888'
+        key = str(os.getenv('SHORT_LINK_API_KEY'))
         url = urllib.parse.quote(long_url)
         r = requests.get('http://cutt.ly/api/api.php?key={}&short={}'.format(key, url))
 
