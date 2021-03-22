@@ -233,9 +233,9 @@ def generate_letters_doc(request):
         except Exception as e:
             messages.error(request, f'Error generant les cartes en format docx: {e}')
             return redirect("letter-generator-page")
-
     messages.success(request, 'Cartes generades correctament en format docx')
     return redirect("letter-generator-page")
+
 
 
 def generate_letters_pdf(request):

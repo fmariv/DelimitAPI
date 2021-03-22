@@ -13,6 +13,17 @@
 {% endblock %}
 
 {% block apps_content %}
+<pre class="expedient-type"> Tipus d'expedient </pre>
+<div class="expedient-type-container">
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="radio" name="expedient" id="inline-checkbox-1" value="rep">
+      <label class="form-check-label" for="inline-checkbox-1">Replantejament</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="radio" name="expedient" id="inline-checkbox-2" value="del">
+      <label class="form-check-label" for="inline-checkbox-2">Delimitació</label>
+    </div>
+</div>
 <div class="letter-form-container">
     <form action="{% url 'municat-data-extraction' %}">
         <button type="submit" class="btn btn-primary mb-2">Extreure informació del Municat</button>

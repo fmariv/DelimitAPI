@@ -93,6 +93,22 @@ body {
     align-items: center;
     gap: 2%;
 }
+.expedient-type-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2%;
+    padding-bottom: 2%;
+}
+.expedient-type {
+    font-weight: bold;
+    font-size: 15px;
+    color: white;
+    text-align: center;
+}
+#inline-checkbox-1 {
+    color: white;
+}
 .error-message {
     color: red;
 }
@@ -162,4 +178,7 @@ body {
 }
 .footer > a {
     color: white;
+}
+.form-check-label {
+    color: white !important;
 }
