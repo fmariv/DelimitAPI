@@ -197,6 +197,7 @@ def generate_letters_doc(request):
     :param request: Http request
     :return: redirect to the letter generator page
     """
+    expedient = request.GET.get('expedient')
     info_municat_df = pd.read_csv(INFO_MUNICAT_OUTPUT_DATA)
     doc = MailMerge(TEMPLATE)
     for i, feature in info_municat_df.iterrows():
