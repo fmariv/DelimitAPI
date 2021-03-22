@@ -13,28 +13,24 @@
 {% endblock %}
 
 {% block apps_content %}
-<pre class="expedient-type"> Tipus d'expedient </pre>
-<div class="expedient-type-container">
-    <div class="form-check form-check-inline">
-      <input class="form-check-input" type="radio" name="expedient" id="inline-checkbox-1" value="rep">
-      <label class="form-check-label" for="inline-checkbox-1">Replantejament</label>
+<form>
+    <pre class="expedient-type"> Tipus d'expedient </pre>
+    <div class="expedient-type-container">
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="expedient" id="inline-checkbox-1" value="rep">
+          <label class="form-check-label" for="inline-checkbox-1">Replantejament</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="expedient" id="inline-checkbox-2" value="del" checked>
+          <label class="form-check-label" for="inline-checkbox-2">Delimitació</label>
+        </div>
     </div>
-    <div class="form-check form-check-inline">
-      <input class="form-check-input" type="radio" name="expedient" id="inline-checkbox-2" value="del">
-      <label class="form-check-label" for="inline-checkbox-2">Delimitació</label>
+    <div class="letter-form-container">
+        <button type="submit" class="btn btn-primary mb-2" formaction="{% url 'municat-data-extraction' %}">Extreure informació del Municat</button>
+        <button type="submit" class="btn btn-primary mb-2" formaction="{% url 'doc-letter-generation' %}">Generar cartes en docx</button>
+        <button type="submit" class="btn btn-primary mb-2" formaction="{% url 'pdf-letter-generation' %}" >Generar cartes en pdf</button>
     </div>
-</div>
-<div class="letter-form-container">
-    <form action="{% url 'municat-data-extraction' %}">
-        <button type="submit" class="btn btn-primary mb-2">Extreure informació del Municat</button>
-    </form>
-    <form action="{% url 'doc-letter-generation' %}">
-        <button type="submit" class="btn btn-primary mb-2">Generar cartes en docx</button>
-    </form>
-    <form action="{% url 'pdf-letter-generation' %}">
-        <button type="submit" class="btn btn-primary mb-2">Generar cartes en pdf</button>
-    </form>
-</div>
+</form>
 <div class="alert-messages">
         {% include 'messages.html' %}
 </div>

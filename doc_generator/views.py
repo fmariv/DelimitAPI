@@ -237,7 +237,6 @@ def generate_letters_doc(request):
     return redirect("letter-generator-page")
 
 
-
 def generate_letters_pdf(request):
     """
     Convert all the docx files into pdf files
