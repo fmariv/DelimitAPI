@@ -64,7 +64,8 @@ class MunicatDataExtractor(View):
             self.line_id = int(feature[0])
             url = feature[1]
             self.get_municipis_names()
-            short_url_ok = self.short_url(url)
+            #short_url_ok = self.short_url(url)
+            short_url_ok = 'loo'
             if not short_url_ok and all_url_shortened:
                 all_url_shortened = False
             self.get_council_data()
@@ -197,6 +198,7 @@ def generate_letters_doc(request):
     :param request: Http request
     :return: redirect to the letter generator page
     """
+    expedient_type = request.GET.get('expedient')
     info_municat_df = pd.read_csv(INFO_MUNICAT_OUTPUT_DATA)
     doc = MailMerge(TEMPLATE)
     for i, feature in info_municat_df.iterrows():
