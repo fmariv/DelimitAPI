@@ -10,5 +10,5 @@ Class-based views
 urlpatterns = [
     re_path(r'^$', render_qa_page, name='qa-page'),
     re_path(r'^check/$', CheckQualityLine.as_view(), name='qa-line'),
-    re_path(r'^open-qgis/$', open_qgis)
+    re_path(r'^open-qgis/$', open_qgis, name='open-qgis')
 ]
