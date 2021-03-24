@@ -83,7 +83,7 @@ class MunicatDataExtractor(View):
         """Funció per a escriure la capçalera al csv"""
         with open(INFO_MUNICAT_OUTPUT_DATA, 'w', encoding='utf-8') as f:
             header = [
-                "IDLINIA", "MUNI1", "TRACTAMENT", "SEXE", "NOM1", "COGNOM1-1", "COGNOM1-2", "CARREC1", "NOMENS1",
+                "IDLINIA", "DATA-OD", "HORA-OD", "MUNI1", "LOCAL", "TRACTAMENT", "SEXE", "NOM1", "COGNOM1-1", "COGNOM1-2", "CARREC1", "NOMENS1",
                 "MUNI2", "NOM2", "COGNOM2-1", "COGNOM2-2", "CARREC2", "NOMENS2", "ENLLAÇ"
             ]
             writer = csv.writer(f, lineterminator='\n')
@@ -163,10 +163,10 @@ class MunicatDataExtractor(View):
         nomens_2 = muni_2_council_data.iloc[0]['NOMENS']
 
         if name_major_1 and name_major_2:   # Check that all the data is filled and wraps it
-            self.council_1_data = [self.line_id, self.muni_1, tractament_1, gender_1, name_major_1, surname_1_major_1,
+            self.council_1_data = [self.line_id, '', '', self.muni_1, '', tractament_1, gender_1, name_major_1, surname_1_major_1,
                                    surname_2_major_1, carrec_1, nomens_1, self.muni_2, name_major_2, surname_1_major_2,
                                    surname_2_major_2, carrec_2, nomens_2, self.shortened_url]
-            self.council_2_data = [self.line_id, self.muni_2, tractament_2, gender_2, name_major_2, surname_1_major_2,
+            self.council_2_data = [self.line_id, '', '', self.muni_2, '', tractament_2, gender_2, name_major_2, surname_1_major_2,
                                    surname_2_major_2, carrec_2, nomens_2, self.muni_1, name_major_1, surname_1_major_1,
                                    surname_2_major_1, carrec_1, nomens_1, self.shortened_url]
 
@@ -199,8 +199,17 @@ def generate_letters_doc(request):
     """
     expedient = request.GET.get('expedient')
     info_municat_df = pd.read_csv(INFO_MUNICAT_OUTPUT_DATA)
-    doc = MailMerge(TEMPLATE)
+    if expedient == 'del':
+        doc = MailMerge(TEMPLATE_DEL)
+        output_path = AUTO_CARTA_OUTPUT_DOC_D
+        file_type = 'CARTA_Inici_operacions_delimitacio'
+    elif expedient == 'rep':
+        doc = MailMerge(TEMPLATE_REP)
+        output_path = AUTO_CARTA_OUTPUT_DOC_R
+        file_type = 'ofici_tramesa_replantejament'
+
     for i, feature in info_municat_df.iterrows():
+        # Set doc variables depending on the expedient type
         short_line_id = feature['IDLINIA']
         line_id = line_id_2_txt(short_line_id)
         muni_1 = feature['MUNI1']
@@ -214,22 +223,48 @@ def generate_letters_doc(request):
         salutacio = CASOS_SALUTACIO[sexe]
         muni_2 = feature['MUNI2']
         url = feature['ENLLAÇ']
+        if expedient == 'del':
+            data_od = feature['DATA-OD']
+            hora_od = feature['HORA-OD']
+            muni_2_prep = feature['NOMENS2'].split('Ajuntament')[-1]
+            local = feature['LOCAL']
+            if local == 'S':
+                seu_od = 'del vostre ajuntament'
+            elif local == 'N':
+                seu_od = f"de l'ajuntament {muni_2_prep}"
 
         try:
-            doc.merge(
-                Tractament=tractament,
-                Nom=nom,
-                Cognom1=cognom_1,
-                Cognom2=cognom_2,
-                Carrec=carrec,
-                nomens=nomens,
-                XXXX=line_id,
-                Salutacio=salutacio,
-                Municipi2=muni_2,
-                Link=url
-            )
+            if expedient == 'del':
+                doc.merge(
+                    Tractament=tractament,
+                    Nom=nom,
+                    Cognom1=cognom_1,
+                    Cognom2=cognom_2,
+                    Carrec=carrec,
+                    nomens=nomens,
+                    XXXX=line_id,
+                    Salutacio=salutacio,
+                    Prep_muni_visitant=muni_2_prep,
+                    data_od=data_od,
+                    hora_od=hora_od,
+                    seu_od=seu_od,
+                    Link=url
+                )
+            elif expedient == 'rep':
+                doc.merge(
+                    Tractament=tractament,
+                    Nom=nom,
+                    Cognom1=cognom_1,
+                    Cognom2=cognom_2,
+                    Carrec=carrec,
+                    nomens=nomens,
+                    XXXX=line_id,
+                    Salutacio=salutacio,
+                    Municipi2=muni_2,
+                    Link=url
+                )
 
-            doc_output_path = os.path.join(AUTO_CARTA_OUTPUT_DOC, f'{line_id}_ofici tramesa replantejament_{muni_1}.docx')
+            doc_output_path = os.path.join(output_path, f'{line_id}_{file_type}_{muni_1}.docx')
             doc.write(doc_output_path)
         except Exception as e:
             messages.error(request, f'Error generant les cartes en format docx: {e}')
@@ -246,10 +281,18 @@ def generate_letters_pdf(request):
     """
     pythoncom.CoInitialize()
 
-    for f in os.listdir(AUTO_CARTA_OUTPUT_DOC):
+    expedient = request.GET.get('expedient')
+    if expedient == 'del':
+        output_doc = AUTO_CARTA_OUTPUT_DOC_D
+        output_pdf = AUTO_CARTA_OUTPUT_PDF_D
+    elif expedient == 'rel':
+        output_doc = AUTO_CARTA_OUTPUT_DOC_R
+        output_pdf = AUTO_CARTA_OUTPUT_PDF_R
+
+    for f in os.listdir(output_doc):
         # Font -> https://stackoverflow.com/questions/6011115/doc-to-pdf-using-python
-        in_file = os.path.join(AUTO_CARTA_OUTPUT_DOC, f)
-        out_file = os.path.join(AUTO_CARTA_OUTPUT_PDF, f.replace("docx", "pdf"))
+        in_file = os.path.join(output_doc, f)
+        out_file = os.path.join(output_pdf, f.replace("docx", "pdf"))
 
         wdFormatPDF = 17
 
