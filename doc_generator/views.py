@@ -76,7 +76,7 @@ class MunicatDataExtractor(View):
         with open(INFO_MUNICAT_OUTPUT_DATA, 'w', encoding='utf-8') as f:
             header = [
                 "IDLINIA", "DATA-OD", "HORA-OD", "MUNI1", "LOCAL", "TRACTAMENT", "SEXE", "NOM1", "COGNOM1-1", "COGNOM1-2", "CARREC1", "NOMENS1",
-                "MUNI2", "NOM2", "COGNOM2-1", "COGNOM2-2", "CARREC2", "NOMENS2", "ENLLAÇ"
+                "MUNI2", "NOM2", "COGNOM2-1", "COGNOM2-2", "CARREC2", "NOMENS2", "LINK"
             ]
             writer = csv.writer(f, lineterminator='\n')
             writer.writerow(header)
@@ -173,14 +173,6 @@ def generate_letters_doc(request):
     """
     expedient = request.GET.get('expedient')
     info_municat_df = pd.read_csv(INFO_MUNICAT_OUTPUT_DATA)
-    if expedient == 'del':
-        doc = MailMerge(TEMPLATE_DEL)
-        output_path = AUTO_CARTA_OUTPUT_DOC_D
-        file_type = 'CARTA_Inici_operacions_delimitacio'
-    elif expedient == 'rep':
-        doc = MailMerge(TEMPLATE_REP)
-        output_path = AUTO_CARTA_OUTPUT_DOC_R
-        file_type = 'ofici_tramesa_replantejament'
 
     for i, feature in info_municat_df.iterrows():
         # Set doc variables depending on the expedient type
@@ -196,19 +188,23 @@ def generate_letters_doc(request):
         nomens = feature['NOMENS1']
         salutacio = CASOS_SALUTACIO[sexe]
         muni_2 = feature['MUNI2']
-        url = feature['ENLLAÇ']
+        url = feature['LINK']
         if expedient == 'del':
-            data_od = feature['DATA-OD']
+            data_od_raw = feature['DATA-OD'].split('/')
+            data_od = f'{data_od_raw[0]} {MESOS_CAT[data_od_raw[1]]} {data_od_raw[2]}'
             hora_od = feature['HORA-OD']
             muni_2_prep = feature['NOMENS2'].split('Ajuntament')[-1]
             local = feature['LOCAL']
             if local == 'S':
                 seu_od = 'del vostre ajuntament'
             elif local == 'N':
-                seu_od = f"de l'ajuntament {muni_2_prep}"
+                seu_od = f"de l'ajuntament{muni_2_prep}"
 
         try:
             if expedient == 'del':
+                doc = MailMerge(TEMPLATE_DEL)
+                output_path = AUTO_CARTA_OUTPUT_DOC_D
+                file_type = 'CARTA_Inici_operacions_delimitacio'
                 doc.merge(
                     Tractament=tractament,
                     Nom=nom,
@@ -219,12 +215,15 @@ def generate_letters_doc(request):
                     XXXX=line_id,
                     Salutacio=salutacio,
                     Prep_muni_visitant=muni_2_prep,
-                    data_od=data_od,
-                    hora_od=hora_od,
-                    seu_od=seu_od,
+                    Data_od=data_od,
+                    Hora_od=hora_od,
+                    Seu_od=seu_od,
                     Link=url
                 )
             elif expedient == 'rep':
+                doc = MailMerge(TEMPLATE_REP)
+                output_path = AUTO_CARTA_OUTPUT_DOC_R
+                file_type = 'ofici_tramesa_replantejament'
                 doc.merge(
                     Tractament=tractament,
                     Nom=nom,
