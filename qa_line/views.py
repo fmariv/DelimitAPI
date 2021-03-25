@@ -873,13 +873,6 @@ class CheckQualityLine(View):
         return {'response': self.response_data}
 
 
-def open_qgis(request):
-    """Open project qgs"""
-    os.startfile(QGS_PATH)
-    messages.info(request, "S'està obrint el projecte de QGIS")
-    return redirect('qa-page')
-
-
 def render_qa_page(request):
     """
     Render the same qa page itself

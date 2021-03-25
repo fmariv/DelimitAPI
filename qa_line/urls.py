@@ -1,5 +1,5 @@
 from django.urls import re_path
-from qa_line.views import CheckQualityLine, open_qgis, render_qa_page
+from qa_line.views import CheckQualityLine, render_qa_page
 
 '''
 Class-based views
@@ -10,5 +10,4 @@ Class-based views
 urlpatterns = [
     re_path(r'^$', render_qa_page, name='qa-page'),
     re_path(r'^check/$', CheckQualityLine.as_view(), name='qa-line'),
-    re_path(r'^open-qgis/$', open_qgis, name='open-qgis')
 ]
