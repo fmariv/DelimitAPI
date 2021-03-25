@@ -14,7 +14,6 @@ Extract geometries and data from the database
 
 # Standard library imports
 import os
-import os.path as path
 import shutil
 import csv
 from datetime import datetime
@@ -23,7 +22,6 @@ import logging
 # Third party imports
 import geopandas as gpd
 from osgeo import gdal
-from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.views import View
 from django.contrib import messages

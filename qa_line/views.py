@@ -30,7 +30,6 @@ from django.contrib import messages
 from qa_line.config import *
 from DelimitAPI.common.utils import line_id_2_txt
 
-
 class CheckQualityLine(View):
     """
     Class for checking a line's geometry and attributes quality previously to upload it into the database
@@ -71,17 +70,16 @@ class CheckQualityLine(View):
         # Set up parameters
         line_id = request.GET.get('line_id')
         if not line_id:
-            msg = "No s'ha introduït cap ID Linia."
-            response = self.create_error_response(msg)
-            return render(request, '../templates/qa_reports.html', response)
+            messages.error(request, "No s'ha introduit cap ID Linia")
+            return redirect("qa-page")
         self.set_up(line_id)
         # Check that the upload line directory exists
         line_dir_exists = self.check_line_dir_exists()
         if not line_dir_exists:
-            msg = f"No existeix la carpeta de la linia {self.line_id} al directori de càrrega."
-            response = self.create_error_response(msg)
-            return render(request, '../templates/qa_reports.html', response)
+            messages.error(request, f"No existeix la carpeta de la linia {self.line_id} al directori de càrrega.")
+            return redirect("qa-page")
         # Check and set directories paths
+        # From this step to above the bugs and reports are going to be written into the log report
         directory_tree_valid = self.check_directories()
         if directory_tree_valid:
             self.set_directories()

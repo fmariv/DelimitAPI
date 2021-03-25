@@ -11,8 +11,6 @@
 # Standard library imports
 import os
 import csv
-import urllib
-import requests
 
 # Third party imports
 from django.views import View
