@@ -16,7 +16,7 @@
       <input type="number" class="form-control mb-2 mr-sm-2" id="line_id" placeholder="ID línia" name="line_id" value="{{ line_id }}">
       <button type="submit" class="btn btn-primary mb-2">Check</button>
     </form>
-    <form action="open-qgis/">
+    <form action="{% url 'open-qgis' %}">
         <button type="submit" class="btn btn-primary mb-2">Obrir projecte QGIS</button>
     </form>
 </div>
