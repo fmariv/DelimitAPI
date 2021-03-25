@@ -41,7 +41,7 @@ class MunicatDataExtractor(View):
     info_line_id_df = pd.read_csv(INFO_MUNICAT_DATA)
     # Variables
     line_id = None
-    shortened_url = None
+    url = None
     muni_1 = None
     muni_2 = None
     council_1_data = None
@@ -59,24 +59,16 @@ class MunicatDataExtractor(View):
             messages.error(request, "Existeixen links duplicats a l'arxiu CSV d'entrada de dades. Si us plau, revisa-ho")
             return redirect("letter-generator-page")
 
-        all_url_shortened = True   # Variable to check whether some or all of the urls have been shortened or not
         for i, feature in self.info_line_id_df.iterrows():
             self.line_id = int(feature[0])
-            url = feature[1]
+            self.url = feature[1]
             self.get_municipis_names()
-            short_url_ok = self.short_url(url)
-            if not short_url_ok and all_url_shortened:
-                all_url_shortened = False
             self.get_council_data()
             self.write_info_csv()
             self.reset_variables()
 
-        if not all_url_shortened:
-            messages.warning(request, "S'ha extret la informació del Municat, però no s'han escurçat alguns o tots els links")
-            return redirect("letter-generator-page")
-        else:
-            messages.success(request, 'Informació del Municat extreta correctament')
-            return redirect("letter-generator-page")
+        messages.success(request, 'Informació del Municat extreta correctament')
+        return redirect("letter-generator-page")
 
     @staticmethod
     def write_csv_head():
@@ -120,24 +112,6 @@ class MunicatDataExtractor(View):
         self.muni_1 = munis_line_id.NOMMUNI1.iloc[0]
         self.muni_2 = munis_line_id.NOMMUNI2.iloc[0]
 
-    def short_url(self, long_url):
-        """
-        Short the given url in order to avoid problems by it length
-        :param long_url: input data url
-        :return: shortened url after short process
-        """
-        key = str(os.getenv('SHORT_LINK_API_KEY'))
-        url = urllib.parse.quote(long_url)
-        r = requests.get('http://cutt.ly/api/api.php?key={}&short={}'.format(key, url))
-
-        if r.status_code == requests.codes.ok:
-            response = r.json()
-            self.shortened_url = response['url']['shortLink']
-            return True, None
-        else:
-            self.shortened_url = long_url
-            return False, r.status_code
-
     def get_council_data(self):
         """
         Get the necessary council's data and wraps it
@@ -165,10 +139,10 @@ class MunicatDataExtractor(View):
         if name_major_1 and name_major_2:   # Check that all the data is filled and wraps it
             self.council_1_data = [self.line_id, '', '', self.muni_1, '', tractament_1, gender_1, name_major_1, surname_1_major_1,
                                    surname_2_major_1, carrec_1, nomens_1, self.muni_2, name_major_2, surname_1_major_2,
-                                   surname_2_major_2, carrec_2, nomens_2, self.shortened_url]
+                                   surname_2_major_2, carrec_2, nomens_2, self.url]
             self.council_2_data = [self.line_id, '', '', self.muni_2, '', tractament_2, gender_2, name_major_2, surname_1_major_2,
                                    surname_2_major_2, carrec_2, nomens_2, self.muni_1, name_major_1, surname_1_major_1,
-                                   surname_2_major_1, carrec_1, nomens_1, self.shortened_url]
+                                   surname_2_major_1, carrec_1, nomens_1, self.url]
 
     def write_info_csv(self):
         """
@@ -184,7 +158,7 @@ class MunicatDataExtractor(View):
         Reset all the line variables and council's data to None
         """
         self.line_id = None
-        self.shortened_url = None
+        self.url = None
         self.muni_1 = None
         self.muni_2 = None
         self.council_1_data = None
