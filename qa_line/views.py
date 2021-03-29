@@ -72,6 +72,9 @@ class CheckQualityLine(View):
         if not line_id:
             messages.error(request, "No s'ha introduit cap ID Linia")
             return redirect("qa-page")
+        if int(line_id) < 0:
+            messages.error(request, "L'ID Linia no és vàlid")
+            return redirect("qa-page")
         self.set_up(line_id)
         # Check that the upload line directory exists
         line_dir_exists = self.check_line_dir_exists()
