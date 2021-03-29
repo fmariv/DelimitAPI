@@ -281,11 +281,18 @@ def generate_letters_pdf(request):
     return redirect("letter-generator-page")
 
 
-class ResolutionGenerator(View):
+def remove_letters(request):
     """
-    Class for generating the DOGC's resolutions that have to publish in order ot notify the ending of a expedient
+    Remove all the files and letters generated in the output directories
+    :param request: Http request
+    :return: redirect to the letter generator page
     """
-    # TODO
+    output_directories_list = [AUTO_CARTA_OUTPUT_DOC_D, AUTO_CARTA_OUTPUT_PDF_D, AUTO_CARTA_OUTPUT_DOC_R,
+                               AUTO_CARTA_OUTPUT_PDF_R]
+    for output_directory in output_directories_list:
+        for f in os.listdir(output_directory):
+            file_ = os.path.join(output_directory, f)
+            os.remove(file_)
 
 
 def render_doc_generator_page(request):
