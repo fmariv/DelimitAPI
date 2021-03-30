@@ -18,6 +18,7 @@ import os.path as path
 from datetime import datetime
 import logging
 import re
+import shutil
 
 # Third party imports
 import geopandas as gpd
@@ -30,6 +31,7 @@ from django.contrib import messages
 from qa_line.config import *
 from DelimitAPI.common.utils import line_id_2_txt
 
+
 class CheckQualityLine(View):
     """
     Class for checking a line's geometry and attributes quality previously to upload it into the database
@@ -37,7 +39,7 @@ class CheckQualityLine(View):
     # Workspace parameters
     line_id = None
     line_id_txt = None
-    current_date = datetime.now().strftime("%Y%m%d-%H%M")
+    current_date = None
     logger = logging.getLogger()
     log_path = None
     ppf_list = None
@@ -149,12 +151,16 @@ class CheckQualityLine(View):
         self.check_relation_points_tables()
         # Check the topology in order to avoid topological errors
         self.check_topology()
-
+        
+        # Remove working directory
+        self.rm_working_directory()
         # Send response as OK
         self.response_data['result'] = 'OK'
         self.response_data['message'] = f'Linia {line_id} checkejada'
         response = self.add_response_data()
-        return render(request, '../templates/qa_reports.html', response)
+        request.session['response'] = response
+        self.reset_logger()   # Reset the logger to avoid modify tbe later reports done
+        return redirect('qa-report')
 
     def set_up(self, line_id):
         """
@@ -179,6 +185,7 @@ class CheckQualityLine(View):
         # Message format
         log_format = logging.Formatter("%(levelname)s - %(message)s")
         # Log filename and path
+        self.current_date = datetime.now().strftime("%Y%m%d-%H%M")
         log_name = f"QA-Report_{self.line_id_txt}_{self.current_date}.txt"
         self.log_path = path.join(LINES_DIR, self.line_id, WORK_REC_DIR, log_name)
         if path.exists(self.log_path):   # If a log with the same filename exists, removes it
@@ -189,12 +196,15 @@ class CheckQualityLine(View):
 
     def check_line_dir_exists(self):
         """
-        Check if the line folder exists in the uploading directory
+        Check if the line folder exists in the uploading directory and copy it into the working directory
         :return: boolean that indicates whether the line folder exists or not
         """
         line_folder = os.path.join(UPLOAD_DIR, str(self.line_id))
         if path.exists(line_folder):
-            self.line_folder = line_folder
+            local_line_folder = os.path.join(WORK_DIR, str(self.line_id))
+            if not os.path.exists(local_line_folder):
+                shutil.copytree(line_folder, local_line_folder)
+            self.line_folder = local_line_folder
             return True
         else:
             return False
@@ -223,6 +233,7 @@ class CheckQualityLine(View):
 
     def set_directories(self):
         """Set paths to directories"""
+
         self.carto_folder = os.path.join(self.doc_delim, 'Cartografia')
         self.tables_folder = os.path.join(self.doc_delim, 'Taules')
         self.photo_folder = os.path.join(self.doc_delim, 'Fotografies')
@@ -273,6 +284,7 @@ class CheckQualityLine(View):
 
     def copy_data_2_gpkg(self):
         """Copy all the feature classes and tables from the line's folder to the local work geopackage"""
+
         for shape in SHAPES_LIST:
             shape_name = shape.split('.')[0]
             shape_path = os.path.join(self.carto_folder, shape)
@@ -847,6 +859,10 @@ class CheckQualityLine(View):
 
         self.logger.info('Arxius temporals esborrats')
 
+    def rm_working_directory(self):
+        """Remove temporal local line directory"""
+        shutil.rmtree(self.line_folder)
+
     def create_error_response(self, message):
         """Create a error JSON for the response data"""
         self.logger.error(message)
@@ -873,6 +889,15 @@ class CheckQualityLine(View):
 
         return {'response': self.response_data}
 
+    def reset_logger(self):
+        """
+
+        :return:
+        """
+        for h in self.logger.handlers:
+            self.logger.removeHandler(h)
+        logging.shutdown()
+
 
 def render_qa_page(request):
     """
@@ -881,3 +906,14 @@ def render_qa_page(request):
     :return:
     """
     return render(request, '../templates/qa_page.html')
+
+
+def render_report_page(request):
+    """
+
+    :param request:
+    :param response
+    :return:
+    """
+    response = request.session['response']
+    return render(request, '../templates/qa_reports.html', response)
