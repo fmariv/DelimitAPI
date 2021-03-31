@@ -18,6 +18,7 @@ import os.path as path
 from datetime import datetime
 import logging
 import re
+import shutil
 
 # Third party imports
 import geopandas as gpd
@@ -30,6 +31,7 @@ from django.contrib import messages
 from qa_line.config import *
 from DelimitAPI.common.utils import line_id_2_txt
 
+
 class CheckQualityLine(View):
     """
     Class for checking a line's geometry and attributes quality previously to upload it into the database
@@ -37,7 +39,7 @@ class CheckQualityLine(View):
     # Workspace parameters
     line_id = None
     line_id_txt = None
-    current_date = datetime.now().strftime("%Y%m%d-%H%M")
+    current_date = None
     logger = logging.getLogger()
     log_path = None
     ppf_list = None
@@ -75,12 +77,12 @@ class CheckQualityLine(View):
         if int(line_id) < 0:
             messages.error(request, "L'ID Linia no és vàlid")
             return redirect("qa-page")
-        self.set_up(line_id)
         # Check that the upload line directory exists
-        line_dir_exists = self.check_line_dir_exists()
+        line_dir_exists = self.check_line_dir_exists(line_id)
         if not line_dir_exists:
             messages.error(request, f"No existeix la carpeta de la linia {self.line_id} al directori de càrrega.")
             return redirect("qa-page")
+        self.set_up(line_id)
         # Check and set directories paths
         # From this step to above the bugs and reports are going to be written into the log report
         directory_tree_valid = self.check_directories()
@@ -149,12 +151,16 @@ class CheckQualityLine(View):
         self.check_relation_points_tables()
         # Check the topology in order to avoid topological errors
         self.check_topology()
-
+        
+        # Remove working directory
+        self.rm_working_directory()
         # Send response as OK
         self.response_data['result'] = 'OK'
         self.response_data['message'] = f'Linia {line_id} checkejada'
         response = self.add_response_data()
-        return render(request, '../templates/qa_reports.html', response)
+        request.session['response'] = response
+        self.reset_logger()   # Reset the logger to avoid modify tbe later reports done
+        return redirect('qa-report')
 
     def set_up(self, line_id):
         """
@@ -179,6 +185,7 @@ class CheckQualityLine(View):
         # Message format
         log_format = logging.Formatter("%(levelname)s - %(message)s")
         # Log filename and path
+        self.current_date = datetime.now().strftime("%Y%m%d-%H%M")
         log_name = f"QA-Report_{self.line_id_txt}_{self.current_date}.txt"
         self.log_path = path.join(LINES_DIR, self.line_id, WORK_REC_DIR, log_name)
         if path.exists(self.log_path):   # If a log with the same filename exists, removes it
@@ -187,14 +194,18 @@ class CheckQualityLine(View):
         file_handler.setFormatter(log_format)
         self.logger.addHandler(file_handler)
 
-    def check_line_dir_exists(self):
+    def check_line_dir_exists(self, line_id):
         """
-        Check if the line folder exists in the uploading directory
+        Check if the line folder exists in the uploading directory and copy it into the working directory
         :return: boolean that indicates whether the line folder exists or not
         """
-        line_folder = os.path.join(UPLOAD_DIR, str(self.line_id))
+        line_folder = os.path.join(UPLOAD_DIR, str(line_id))
         if path.exists(line_folder):
-            self.line_folder = line_folder
+            local_line_folder = os.path.join(WORK_DIR, str(line_id))
+            if os.path.exists(local_line_folder):
+                shutil.rmtree(local_line_folder)
+            shutil.copytree(line_folder, local_line_folder)
+            self.line_folder = local_line_folder
             return True
         else:
             return False
@@ -223,6 +234,7 @@ class CheckQualityLine(View):
 
     def set_directories(self):
         """Set paths to directories"""
+
         self.carto_folder = os.path.join(self.doc_delim, 'Cartografia')
         self.tables_folder = os.path.join(self.doc_delim, 'Taules')
         self.photo_folder = os.path.join(self.doc_delim, 'Fotografies')
@@ -273,6 +285,7 @@ class CheckQualityLine(View):
 
     def copy_data_2_gpkg(self):
         """Copy all the feature classes and tables from the line's folder to the local work geopackage"""
+
         for shape in SHAPES_LIST:
             shape_name = shape.split('.')[0]
             shape_path = os.path.join(self.carto_folder, shape)
@@ -656,7 +669,9 @@ class CheckQualityLine(View):
         etiquetes = sorted_points_df_temp['ETIQUETA'].tolist()
         etiquetes_int = []
         for i in etiquetes:
-            point_num = int(re.search(r'\d+', i).group())
+            point_num = re.search(r'\d+', i)
+            if point_num:
+                point_num = int(point_num.group())
             etiquetes_int.append(point_num)
         # Add sorting column
         sorted_points_df_temp['sorting'] = etiquetes_int
@@ -666,6 +681,9 @@ class CheckQualityLine(View):
         ppf_point = sorted_points_df['ID_PUNT'].isin(self.ppf_list)
         sorted_points_df = sorted_points_df[ppf_point]
         # Get a list with the contact field from both first and last point
+        if sorted_points_df.empty:
+            self.logger.error("No hi ha punts indicats com Proposta")
+            return
         first_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[0]
         last_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[-1]
         if first_point['CONTACTE'] and last_point['CONTACTE']:
@@ -700,7 +718,7 @@ class CheckQualityLine(View):
             point_id_ = feature_['ID_PUNT']
             if point_id_ not in points_id_list:
                 punt_fit_valid = False
-                point_id_ = point_id.split('-')[-1]
+                point_id_ = point_id_.split('-')[-1]
                 self.logger.error(f'El registre amb ID PUNT : {point_id_} de la taula PUNT_FIT no està a la capa Punt.')
         if punt_fit_valid:
             self.logger.info('      Correspondència OK entre els punts de PUNT_FIT i Punt.')
@@ -847,6 +865,10 @@ class CheckQualityLine(View):
 
         self.logger.info('Arxius temporals esborrats')
 
+    def rm_working_directory(self):
+        """Remove temporal local line directory"""
+        shutil.rmtree(self.line_folder)
+
     def create_error_response(self, message):
         """Create a error JSON for the response data"""
         self.logger.error(message)
@@ -873,11 +895,29 @@ class CheckQualityLine(View):
 
         return {'response': self.response_data}
 
+    def reset_logger(self):
+        """
+        Reset all the loggers handlers and config in order to avoid maintaining it and modifying the later reports
+        """
+        for h in self.logger.handlers:
+            self.logger.removeHandler(h)
+        logging.shutdown()
+
 
 def render_qa_page(request):
     """
     Render the same qa page itself
-    :param request: Rendering of the qa page
-    :return:
+    :param request: Http request
+    :return: Rendering of the qa page
     """
     return render(request, '../templates/qa_page.html')
+
+
+def render_report_page(request):
+    """
+    Render the report page with the response created
+    :param request: Http request
+    :return: Rendering of the report page
+    """
+    response = request.session['response']
+    return render(request, '../templates/qa_reports.html', response)
