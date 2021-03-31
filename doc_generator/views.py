@@ -303,7 +303,6 @@ def remove_letters(request):
             os.remove(file_)
 
 
-
 def render_doc_generator_page(request):
     """
     Render the same doc generator page itself
