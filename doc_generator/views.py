@@ -11,6 +11,7 @@
 # Standard library imports
 import os
 import csv
+import math
 
 # Third party imports
 from django.views import View
@@ -188,11 +189,18 @@ def generate_letters_doc(request):
         muni_2 = feature['MUNI2']
         url = feature['LINK']
         if expedient == 'del':
-            data_od_raw = feature['DATA-OD'].split('/')
-            data_od = f'{data_od_raw[0]} {MESOS_CAT[data_od_raw[1]]} {data_od_raw[2]}'
+            data_od_raw = feature['DATA-OD']
             hora_od = feature['HORA-OD']
-            muni_2_prep = feature['NOMENS2'].split('Ajuntament')[-1]
             local = feature['LOCAL']
+            if math.isnan(data_od_raw) or math.isnan(hora_od) or math.isnan(local):
+                messages.error(request, f'Falta informació per indicar al csv info_municat')
+                return redirect("letter-generator-page")
+            muni_2_prep = feature['NOMENS2'].split('Ajuntament')[-1]
+            data_od_splitted = data_od_raw.split('/')
+            day = data_od_splitted[0]
+            if day[0] == '0':
+                day = day[1]
+            data_od = f'{day} {MESOS_CAT[data_od_splitted[1]]} {data_od_splitted[2]}'
             if local == 'S':
                 seu_od = 'del vostre ajuntament'
             elif local == 'N':
