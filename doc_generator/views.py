@@ -281,13 +281,6 @@ def generate_letters_pdf(request):
     return redirect("letter-generator-page")
 
 
-class ResolutionGenerator(View):
-    """
-    Class for generating the DOGC's resolutions that have to publish in order ot notify the ending of a expedient
-    """
-    # TODO
-
-
 def render_doc_generator_page(request):
     """
     Render the same doc generator page itself

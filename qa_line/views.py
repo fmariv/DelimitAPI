@@ -77,12 +77,12 @@ class CheckQualityLine(View):
         if int(line_id) < 0:
             messages.error(request, "L'ID Linia no és vàlid")
             return redirect("qa-page")
-        self.set_up(line_id)
         # Check that the upload line directory exists
-        line_dir_exists = self.check_line_dir_exists()
+        line_dir_exists = self.check_line_dir_exists(line_id)
         if not line_dir_exists:
             messages.error(request, f"No existeix la carpeta de la linia {self.line_id} al directori de càrrega.")
             return redirect("qa-page")
+        self.set_up(line_id)
         # Check and set directories paths
         # From this step to above the bugs and reports are going to be written into the log report
         directory_tree_valid = self.check_directories()
@@ -194,16 +194,17 @@ class CheckQualityLine(View):
         file_handler.setFormatter(log_format)
         self.logger.addHandler(file_handler)
 
-    def check_line_dir_exists(self):
+    def check_line_dir_exists(self, line_id):
         """
         Check if the line folder exists in the uploading directory and copy it into the working directory
         :return: boolean that indicates whether the line folder exists or not
         """
-        line_folder = os.path.join(UPLOAD_DIR, str(self.line_id))
+        line_folder = os.path.join(UPLOAD_DIR, str(line_id))
         if path.exists(line_folder):
-            local_line_folder = os.path.join(WORK_DIR, str(self.line_id))
-            if not os.path.exists(local_line_folder):
-                shutil.copytree(line_folder, local_line_folder)
+            local_line_folder = os.path.join(WORK_DIR, str(line_id))
+            if os.path.exists(local_line_folder):
+                shutil.rmtree(local_line_folder)
+            shutil.copytree(line_folder, local_line_folder)
             self.line_folder = local_line_folder
             return True
         else:
@@ -668,7 +669,9 @@ class CheckQualityLine(View):
         etiquetes = sorted_points_df_temp['ETIQUETA'].tolist()
         etiquetes_int = []
         for i in etiquetes:
-            point_num = int(re.search(r'\d+', i).group())
+            point_num = re.search(r'\d+', i)
+            if point_num:
+                point_num = int(point_num.group())
             etiquetes_int.append(point_num)
         # Add sorting column
         sorted_points_df_temp['sorting'] = etiquetes_int
@@ -678,6 +681,9 @@ class CheckQualityLine(View):
         ppf_point = sorted_points_df['ID_PUNT'].isin(self.ppf_list)
         sorted_points_df = sorted_points_df[ppf_point]
         # Get a list with the contact field from both first and last point
+        if sorted_points_df.empty:
+            self.logger.error("No hi ha punts indicats com Proposta")
+            return
         first_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[0]
         last_point = sorted_points_df[sorted_points_df.ID_PUNT.isin(self.ppf_list)].iloc[-1]
         if first_point['CONTACTE'] and last_point['CONTACTE']:
@@ -712,7 +718,7 @@ class CheckQualityLine(View):
             point_id_ = feature_['ID_PUNT']
             if point_id_ not in points_id_list:
                 punt_fit_valid = False
-                point_id_ = point_id.split('-')[-1]
+                point_id_ = point_id_.split('-')[-1]
                 self.logger.error(f'El registre amb ID PUNT : {point_id_} de la taula PUNT_FIT no està a la capa Punt.')
         if punt_fit_valid:
             self.logger.info('      Correspondència OK entre els punts de PUNT_FIT i Punt.')
@@ -891,8 +897,7 @@ class CheckQualityLine(View):
 
     def reset_logger(self):
         """
-
-        :return:
+        Reset all the loggers handlers and config in order to avoid maintaining it and modifying the later reports
         """
         for h in self.logger.handlers:
             self.logger.removeHandler(h)
@@ -902,18 +907,17 @@ class CheckQualityLine(View):
 def render_qa_page(request):
     """
     Render the same qa page itself
-    :param request: Rendering of the qa page
-    :return:
+    :param request: Http request
+    :return: Rendering of the qa page
     """
     return render(request, '../templates/qa_page.html')
 
 
 def render_report_page(request):
     """
-
-    :param request:
-    :param response
-    :return:
+    Render the report page with the response created
+    :param request: Http request
+    :return: Rendering of the report page
     """
     response = request.session['response']
     return render(request, '../templates/qa_reports.html', response)
