@@ -417,10 +417,14 @@ class CheckQualityLine(View):
         if not points_founded.empty:
             for index, feature in points_founded.iterrows():
                 if feature['ID_PUNT'] in self.ppf_list:
+                    if feature['AUX'] == '1':
+                        point_num = f"{feature['ID_FITA']}-aux"
+                    else:
+                        point_num = feature['ID_FITA']
                     point_id = feature['ID_PUNT']
-                    point_num = feature['ID_FITA']
                     points_founded_dict[point_num] = point_id
 
+            print(points_founded_dict)
             return points_founded_dict
 
         else:
