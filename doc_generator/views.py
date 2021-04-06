@@ -300,6 +300,9 @@ def remove_letters(request):
             file_ = os.path.join(output_directory, f)
             os.remove(file_)
 
+    messages.success(request, 'Cartes eliminades correctament')
+    return redirect("letter-generator-page")
+
 
 def render_doc_generator_page(request):
     """
