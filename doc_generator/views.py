@@ -38,6 +38,7 @@ class MunicatDataExtractor(View):
     # Dataframes
     info_councils_df = pd.read_csv(INFO_MUNICAT_AJUNTAMENTS)
     info_line_id_df = pd.read_csv(INFO_MUNICAT_DATA)
+    output_xls = None
     # Variables
     line_id = None
     url = None
@@ -51,7 +52,7 @@ class MunicatDataExtractor(View):
         Main entry point. This method is called when someone wants to init the process of extracting the
         councils' data.
         """
-        self.write_csv_head()  # Write CSV header
+        self.create_dataframe()  # Write CSV header
 
         duplicated_links = self.check_duplicated_links()  # Check if exists any duplicated link into the input data
         if duplicated_links:
@@ -63,22 +64,19 @@ class MunicatDataExtractor(View):
             self.url = feature[1]
             self.get_municipis_names()
             self.get_council_data()
-            self.write_info_csv()
+            self.write_info_xls()
             self.reset_variables()
 
         messages.success(request, 'Informació del Municat extreta correctament')
         return redirect("letter-generator-page")
 
-    @staticmethod
-    def write_csv_head():
+    def create_dataframe(self):
         """Funció per a escriure la capçalera al csv"""
-        with open(INFO_MUNICAT_OUTPUT_DATA, 'w', encoding='utf-8') as f:
-            header = [
+        column_names = [
                 "IDLINIA", "DATA-OD", "HORA-OD", "MUNI1", "LOCAL", "TRACTAMENT", "SEXE", "NOM1", "COGNOM1-1", "COGNOM1-2", "CARREC1", "NOMENS1",
                 "MUNI2", "NOM2", "COGNOM2-1", "COGNOM2-2", "CARREC2", "NOMENS2", "LINK"
             ]
-            writer = csv.writer(f, lineterminator='\n')
-            writer.writerow(header)
+        self.output_xls = pd.DataFrame(columns=column_names)
 
     @staticmethod
     def check_duplicated_links():
@@ -132,25 +130,25 @@ class MunicatDataExtractor(View):
         name_major_2 = muni_2_council_data.iloc[0]['NOM']
         surname_1_major_2 = muni_2_council_data.iloc[0]['COGNOM1']
         surname_2_major_2 = muni_2_council_data.iloc[0]['COGNOM2']
-        carrec_2 = muni_2_council_data.iloc[0]['CARREC'].split()[0]  # .split() in order to obtain 'Alcalde' / 'Alcaldessa'
+        carrec_2 = muni_2_council_data.iloc[0]['CARREC'].split()[0]
         nomens_2 = muni_2_council_data.iloc[0]['NOMENS']
 
         if name_major_1 and name_major_2:   # Check that all the data is filled and wraps it
-            self.council_1_data = [self.line_id, '', '', self.muni_1, '', tractament_1, gender_1, name_major_1, surname_1_major_1,
-                                   surname_2_major_1, carrec_1, nomens_1, self.muni_2, name_major_2, surname_1_major_2,
-                                   surname_2_major_2, carrec_2, nomens_2, self.url]
-            self.council_2_data = [self.line_id, '', '', self.muni_2, '', tractament_2, gender_2, name_major_2, surname_1_major_2,
-                                   surname_2_major_2, carrec_2, nomens_2, self.muni_1, name_major_1, surname_1_major_1,
-                                   surname_2_major_1, carrec_1, nomens_1, self.url]
+            self.council_1_data = pd.Series([self.line_id, '', '', self.muni_1, '', tractament_1, gender_1, name_major_1, surname_1_major_1,
+                                            surname_2_major_1, carrec_1, nomens_1, self.muni_2, name_major_2, surname_1_major_2,
+                                            surname_2_major_2, carrec_2, nomens_2, self.url], index=self.output_xls.columns)
+            self.council_2_data = pd.Series([self.line_id, '', '', self.muni_2, '', tractament_2, gender_2, name_major_2, surname_1_major_2,
+                                            surname_2_major_2, carrec_2, nomens_2, self.muni_1, name_major_1, surname_1_major_1,
+                                            surname_2_major_1, carrec_1, nomens_1, self.url], index=self.output_xls.columns)
 
-    def write_info_csv(self):
+            for council_data in self.council_1_data, self.council_2_data:
+                self.output_xls = self.output_xls.append(council_data, ignore_index=True)
+
+    def write_info_xls(self):
         """
-        Write the council's data into the output csv
+        Write the council's data into the output xls
         """
-        with open(INFO_MUNICAT_OUTPUT_DATA, 'a', encoding='utf-8') as f:
-            writer = csv.writer(f, lineterminator='\n')
-            writer.writerow(self.council_1_data)
-            writer.writerow(self.council_2_data)
+        self.output_xls.to_excel(INFO_MUNICAT_OUTPUT_DATA)
 
     def reset_variables(self):
         """
@@ -171,7 +169,7 @@ def generate_letters_doc(request):
     :return: redirect to the letter generator page
     """
     expedient = request.GET.get('expedient')
-    info_municat_df = pd.read_csv(INFO_MUNICAT_OUTPUT_DATA)
+    info_municat_df = pd.read_excel(INFO_MUNICAT_OUTPUT_DATA)
 
     for i, feature in info_municat_df.iterrows():
         # Set doc variables depending on the expedient type
