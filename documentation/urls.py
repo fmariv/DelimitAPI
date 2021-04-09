@@ -13,15 +13,11 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import re_path, include
-import DelimitAPI.views
+from django.urls import re_path
+import documentation.views
 
 urlpatterns = [
-    re_path(r'^$', DelimitAPI.views.index, name='index'),
-    re_path(r'^admin/', admin.site.urls),
-    re_path(r'^qa-line/', include('qa_line.urls')),
-    re_path(r'^municat/', include('municat_generator.urls')),
-    re_path(r'^doc-generator/', include('doc_generator.urls')),
-    re_path(r'^documentation/', include('documentation.urls'))
+    re_path(r'^$', documentation.views.docs_home, name='docs-home'),
+    re_path(r'^qa-line/', documentation.views.docs_qa_line, name='docs-qa-line'),
+    re_path(r'^doc-generator/', documentation.views.docs_doc_generator, name='docs-doc-generator')
 ]

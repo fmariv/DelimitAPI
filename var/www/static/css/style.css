@@ -176,7 +176,10 @@ body {
     font-style: italic;
     padding-top: 0.2%;
 }
-.footer > a, #sub-title > a {
+.footer > a {
+    color: white;
+}
+#sub-title > a {
     color: white;
 }
 .form-check-label {
