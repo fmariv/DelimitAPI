@@ -7,13 +7,8 @@ es disposa d'un lloc web que permet dur a terme un conjunt de processos i fluxos
 manera automatitzada. Mitjançant el navegador del costat esquerra, pots navegar entre les distintes
 aplicacions i apartats de la documentació.
 
+Les carpetes de treball i sortides de l'aplicació es troben a `Programari_i_instruccions\APPs_Delimitacio\DelimitAPI`.
+
 Per veure les dades oficials publicades per la unitat, veure [aquí](https://www.icgc.cat/ca/Administracio-i-empresa/Descarregues/Capes-de-geoinformacio/Base-municipal).
 
 Per dubtes amb el funcionament parlar amb el desenvolupador, `Francisco.Martin@icgc.cat`.
-
-## Commands
-
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
