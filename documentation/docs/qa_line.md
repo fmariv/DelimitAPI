@@ -1,6 +1,6 @@
 # Control de qualitat d'una línia
 
-L’aplicatiu CQ linia és una app de Python destinada a fer un control de la qualitat i 
+L’aplicació CQ linia és una app destinada a fer un control de la qualitat i 
 validesa de les línies i fites que estan preparades per a ser pujades a SIDM3, amb 
 l’objectiu tant de prevenir errors en el moment de carregar les línies a la base de
 dades com d’evitar la presència elements nocius a la mateixa que puguin malmetre la 

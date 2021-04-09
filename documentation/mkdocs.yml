@@ -12,3 +12,4 @@ repo_name: DelimitAPI
 site_description: Documentació de l'aplicació DelimitAPI desenvolupada per la Unitat de Delimitació Territorial de l'Institut Cartogràfic i Geològic de Catalunya, amb l'objectiu d'integrar un seguit d'eines que permeten automatitzar fluxos de treball.
 site_author: Francisco.Martin@icgc.cat
 plugins: []
+dev_addr: '127.0.0.1:8888'
