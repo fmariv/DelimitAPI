@@ -1,0 +1,6 @@
+site_name: DelimitAPI
+nav:
+    - Pàgina principal: index.md
+    - CQ Línia: qa_line.md
+    - Municat: municat.md
+    - Generador Docs: doc_generator.md
