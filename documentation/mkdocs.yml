@@ -4,7 +4,7 @@ nav:
     - CQ Línia: qa_line.md
     - Municat: municat.md
     - Generador de documents: doc_generator.md
-    - Editar el codi base: code.md
+    - Per desenvolupadors: code.md
 theme:
     name: gitbook
 repo_url: https://github.com/fmariv/DelimitAPI
