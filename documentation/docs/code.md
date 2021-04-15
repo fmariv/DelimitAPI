@@ -64,3 +64,12 @@ s'ha de buscar és la funció `generate_letters_doc()`.
 
 A la vegada, els arxius `html` de l'aplicació es troben a les respectives carpetes
 anomenades templates. 
+
+### Comandaments
+
+Hi ha un total de dos comandaments que es poden llençar desde l'entorn de l'aplicatiu amb diferents objectius.
+El primer que s'ha de fer, per tal de poder llençar-los correctament, és anar al directori de l'aplicatiu,
+`Programari_i_instruccions\APPs_Delimitacio\DelimitAPI`, amb una finestra d'Anaconda Prompt. Un cop aquí, hi ha 
+dos comandaments possibles:
+- `python manage.py updatedb` té per lógica actualitzar el geopackage local de treball amb les dades de SIDM3.
+- `python manage.py cleardb` té per lógica netejear i esborrar temporals del geopackage local de treball.
