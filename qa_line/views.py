@@ -3,8 +3,8 @@
 # ----------------------------------------------------------
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Cesc Masdeu & Fran Martin
-# Version: 1.0
-# Date: 20210315
+# Version: 1.1
+# Date: 20210415
 # Version Python: 3.7
 # ----------------------------------------------------------
 
@@ -43,6 +43,7 @@ class CheckQualityLine(View):
     logger = logging.getLogger()
     log_path = None
     ppf_list = None
+    fites_list = None
     founded_points_dict = None
     # Paths to directories and folders
     line_folder = None
@@ -117,6 +118,8 @@ class CheckQualityLine(View):
         self.set_layers_gdf()
         # Create list with only points that are "Proposta Final"
         self.ppf_list = self.get_ppf_list()
+        # Create list with only points that are "Fita"
+        self.fites_list = self.get_fites_list()
         # Create dict with the only points that are founded and PPF
         self.founded_points_dict = self.get_founded_points_dict()
         # Get a dict with the points ID and their coordinates
@@ -136,6 +139,9 @@ class CheckQualityLine(View):
             return render(request, '../templates/qa_reports.html', response)
         # Check the line and point's geometry
         self.check_layers_geometry()
+        # Check that all the points indicated in the line layer exists in the tables and have filled correctly
+        # all the attributes
+        self.check_lin_tram_ppta_points()
         # Get info from the parts and vertexs of every line tram
         self.info_vertexs_line()
         # Check that the points are correctly rounded
@@ -145,7 +151,7 @@ class CheckQualityLine(View):
         # Check some aspects about founded points
         if self.founded_points_dict:   # Check if exists any founded point
             self.check_found_points()
-        # Check that the 3T points are informed correctly
+        # Check that the 3T points are indicated correctly
         self.check_3termes()
         # Check the relation between the tables and the point layer
         self.check_relation_points_tables()
@@ -406,6 +412,15 @@ class CheckQualityLine(View):
 
         return ppf_list
 
+    def get_fites_list(self):
+        """
+        Get dataframe with the ID of the only points that are "fites".
+        :return: fites_list - List with the ID of the fites
+        """
+        fites = self.punt_fit_df['ID_PUNT'].to_list()
+
+        return fites
+
     def get_founded_points_dict(self):
         """
         Get a dict of the founded PPF points with etiqueta as key and ID_PUNT as value
@@ -424,22 +439,46 @@ class CheckQualityLine(View):
                     point_id = feature['ID_PUNT']
                     points_founded_dict[point_num] = point_id
 
-            print(points_founded_dict)
             return points_founded_dict
 
         else:
             return False
 
     def check_layers_geometry(self):
-        """Check the geometry of both line and points"""
+        """ Check the geometry of both line and points """
         self.logger.info('Comprovació de les geometries...')
         self.logger.info('Lin_Tram_Proposta :')
         self.check_lin_tram_geometry()
         self.logger.info('Punt :')
         self.check_points_geometry()
 
+    def check_lin_tram_ppta_points(self):
+        """
+        Check that the points indicated into the line layer as initial and final point exist in the
+        tables and have all them attributes correctly filled
+        :return: boolean - Indicates whether the points exist in the tables or not
+        """
+        lin_tram_ppta_point_1 = self.lin_tram_ppta_line_gdf['ID_FITA1'].to_list()
+        lin_tram_ppta_point_2 = self.lin_tram_ppta_line_gdf['ID_FITA2'].to_list()
+        lin_tram_ppta_points = lin_tram_ppta_point_1 + lin_tram_ppta_point_2
+        lin_tram_ppta_points = list(set(lin_tram_ppta_points))
+
+        points_in_ppf = True
+        for point in lin_tram_ppta_points:
+            if point not in self.ppf_list and points_in_ppf:
+                point_id = point.split('-')[-1]
+                self.logger.error(f"La fita {point_id} està indicada com a fita inicial o final d'un tram "
+                                  f"però no està indicada com a Punt Proposta Final")
+
+        points_in_fites = True
+        for point_ in lin_tram_ppta_points:
+            if point_ not in self.fites_list and points_in_fites:
+                point_id_ = point_.split('-')[-1]
+                self.logger.error(f"La fita {point_id_} està indicada com a fita inicial o final d'un tram "
+                                  f"però no està indicada com a fita")
+
     def check_lin_tram_geometry(self):
-        """Check the line's geometry"""
+        """ Check the line's geometry """
         # Check if there are empty features
         is_empty = self.lin_tram_ppta_line_gdf.is_empty
         empty_features = self.lin_tram_ppta_line_gdf[is_empty]
@@ -696,9 +735,9 @@ class CheckQualityLine(View):
             self.logger.error('Hi ha fites 3T que no tenen informat el camp CONTACTE.')
 
         # Recount how many points have the CONTACTE field not empty
-        informed_3t_points = self.punt_line_gdf[self.punt_line_gdf['CONTACTE'].notnull()]
-        n_informed_3t_points = informed_3t_points.shape[0]
-        self.logger.info(f'Hi ha un total de {n_informed_3t_points} fites amb el camp CONTACTE informat.')
+        indicated_3t_points = self.punt_line_gdf[self.punt_line_gdf['CONTACTE'].notnull()]
+        n_indicated_3t_points = indicated_3t_points.shape[0]
+        self.logger.info(f'Hi ha un total de {n_indicated_3t_points} fites amb el camp CONTACTE informat.')
 
     def check_relation_points_tables(self):
         """Check that all the points that exist in the tables exist in the point layer"""
@@ -832,7 +871,10 @@ class CheckQualityLine(View):
             if point_coords not in self.line_coords_list:   # Check if the point coordinates are not covered by the line
                 if point_id in self.ppf_list:   # Check if the point is a ppf point
                     point = self.punt_fit_df.loc[self.punt_fit_df['ID_PUNT'] == point_id]
-                    aux = point['AUX'].values[0]
+                    aux = point['AUX'].values
+                    if len(aux) < 1:
+                        return
+                    aux = aux[0]
                     n_fita = point['ID_FITA'].values[0]
                     point_id = point_id.split('-')[-1]
                     if aux == '1':
