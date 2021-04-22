@@ -462,20 +462,25 @@ class CheckQualityLine(View):
         lin_tram_ppta_point_2 = self.lin_tram_ppta_line_gdf['ID_FITA2'].to_list()
         lin_tram_ppta_points = lin_tram_ppta_point_1 + lin_tram_ppta_point_2
         lin_tram_ppta_points = list(set(lin_tram_ppta_points))
+        none_exists = any(x is None for x in lin_tram_ppta_points)
+        if none_exists:
+            self.logger.error("Atenció: hi ha trams on falta alguna fita per indicar. Revisar si és un error o no")
 
         points_in_ppf = True
         for point in lin_tram_ppta_points:
-            if point not in self.ppf_list and points_in_ppf:
-                point_id = point.split('-')[-1]
-                self.logger.error(f"La fita {point_id} està indicada com a fita inicial o final d'un tram "
-                                  f"però no està indicada com a Punt Proposta Final")
+            if point is not None:
+                if point not in self.ppf_list and points_in_ppf:
+                    point_id = point.split('-')[-1]
+                    self.logger.error(f"La fita {point_id} està indicada com a fita inicial o final d'un tram "
+                                      f"però no està indicada com a Punt Proposta Final")
 
         points_in_fites = True
         for point_ in lin_tram_ppta_points:
-            if point_ not in self.fites_list and points_in_fites:
-                point_id_ = point_.split('-')[-1]
-                self.logger.error(f"La fita {point_id_} està indicada com a fita inicial o final d'un tram "
-                                  f"però no està indicada com a fita")
+            if point_ is not None:
+                if point_ not in self.fites_list and points_in_fites:
+                    point_id_ = point_.split('-')[-1]
+                    self.logger.error(f"La fita {point_id_} està indicada com a fita inicial o final d'un tram "
+                                      f"però no està indicada com a fita")
 
     def check_lin_tram_geometry(self):
         """ Check the line's geometry """
