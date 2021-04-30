@@ -10,7 +10,7 @@ run-config.txt
 DelimitAPI/settings.py
 # .env
 .env
-# staticfiles
-staticfiles/
 # Pycharm .idea
 .idea/
+# Requirements
+pip-requirements.txt
