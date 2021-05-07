@@ -14,6 +14,7 @@ Extract geometries and data from the database
 
 # Standard library imports
 import os
+import os.path as path
 import shutil
 import csv
 from datetime import datetime
@@ -22,6 +23,7 @@ import logging
 # Third party imports
 import geopandas as gpd
 from osgeo import gdal
+from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.views import View
 from django.contrib import messages
@@ -208,7 +210,7 @@ class MunicatDataGenerator(View):
         Check if the given session ID exists in the database, both in line and points layers
         :return: boolean that indicates if the given session ID exists in the database
         """
-        if (self.session_id in self.line_tram_mem_gdf.id_sessio_.values) and (self.session_id in self.fita_mem_gdf.id_sessio_.values):
+        if (self.session_id in self.line_tram_mem_gdf.id_sessio_carrega.values) and (self.session_id in self.fita_mem_gdf.id_sessio_carrega.values):
             return True
         else:
             return False
@@ -217,7 +219,7 @@ class MunicatDataGenerator(View):
         """Extract, manage and export the data"""
         for layer in self.fita_mem_gdf, self.line_tram_mem_gdf:
             geom_type = ''
-            session_line_id_gdf = layer[(layer['id_sessio_'] == self.session_id) & (layer['id_linia'] == float(self.line_id))]
+            session_line_id_gdf = layer[(layer['id_sessio_carrega'] == self.session_id) & (layer['id_linia'] == float(self.line_id))]
             if layer.geom_type.iloc[0] == 'Point':
                 geom_type = 'Fita'
             elif layer.geom_type.iloc[0] == 'MultiLineString':
@@ -244,18 +246,18 @@ class MunicatDataGenerator(View):
     def manage_delete_fields(self):
         """Edit and delete both layers' fields in order to keep only the important ones"""
         # Points gdf
-        point_delete_fields = ['id_fita', 'id_sessio_', 'num_sector', 'ini_sector', 'fin_sector', 'point_x', 'point_y',
+        point_delete_fields = ['id_fita', 'id_sessio_carrega', 'num_sector', 'ini_sector', 'fin_sector', 'point_x', 'point_y',
                                'point_z', 'estat', 'num_fita_a', 'id_u_fita', 'etiqueta', 'id_punt', 'num_termes',
                                'trobada', 'auxiliar', 'observacio', 'metode', 'contacte', 'foto', 'mides',
-                               'inscripcio', 'id_quadern', 'id_doc_act', 'tipus_doc_', 'data_doc', 'estat_sess',
+                               'inscripcio', 'id_quadern', 'id_doc_acta', 'tipus_doc_ref', 'data_doc', 'estat_sessio',
                                'oficial', 'vigent']
         self.fita_temp_gdf = self.fita_temp_gdf.drop(columns=point_delete_fields)
         self.fita_temp_gdf = self.fita_temp_gdf.astype({'id_linia': int, 'num_fita': int})
         self.fita_temp_gdf = self.fita_temp_gdf.rename({'id_linia': 'ID_LINIA', 'num_fita': 'ID_FITA'}, axis='columns')
 
         # Lines gdf
-        line_delete_fields = ['id_tram_li', 'id_sessio_', 'id_fita_1', 'id_fita_2', 'ordre', 'observacio', 'tipus_doc_',
-                              'data_doc', 'estat_sess', 'oficial', 'vigent']
+        line_delete_fields = ['id_tram_linia', 'id_sessio_carrega', 'id_fita_1', 'id_fita_2', 'ordre', 'observacio', 'tipus_doc_ref',
+                              'data_doc', 'estat_sessio', 'oficial', 'vigent']
         self.line_tram_temp_gdf = self.line_tram_temp_gdf.drop(columns=line_delete_fields)
         self.line_tram_temp_gdf = self.line_tram_temp_gdf.astype({'id_linia': int})
         self.line_tram_temp_gdf = self.line_tram_temp_gdf.rename({'id_linia': 'ID_LINIA'}, axis='columns')
