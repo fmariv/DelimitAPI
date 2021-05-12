@@ -10,10 +10,9 @@ import os.path as path
 WORK_GPKG = r'../DelimitAPI/db/SIDM3.gpkg'
 
 # ESTABLIR PATHS
-#MUNICAT_GENERATOR_WORK = r'V:\Programari_i_instruccions\APPs_Delimitacio\DelimitAPI\'
-MUNICAT_GENERATOR_WORK = r'C:\Users\fmart\Documents\Work\ICGC\DelimitAPI'
+MUNICAT_GENERATOR_WORK = r'V:\Programari_i_instruccions\APPs_Delimitacio\DelimitAPI'
 OUTPUT = path.join(MUNICAT_GENERATOR_WORK, 'municat')
-FOLDERS =  path.join(OUTPUT, 'sortides')
+FOLDERS = path.join(OUTPUT, 'sortides')
 MTT = path.join(OUTPUT, 'MTT.csv')
 
 # CAPES I TAULES
@@ -23,8 +22,7 @@ TEMP_ENTITIES = ['Fita_mem_municat_temp', 'Line_tram_mem_municat_temp']
 # ESTABLIR PATHS
 
 # LINIES
-#LINES_DIR = r'V:\MapaMunicipal\Linies'
-LINES_DIR = r'C:\Users\fmart\Documents\Work\ICGC\DelimitAPI\Test\Linies'
+LINES_DIR = r'V:\MapaMunicipal\Linies'
 
 # PATH DELS PDF
 # ED50

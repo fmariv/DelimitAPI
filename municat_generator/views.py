@@ -343,10 +343,10 @@ class MunicatDataGenerator(View):
         self.line_tram_temp_gdf.to_file(output_line_shp)
 
         # Export data as dxf files
-        output_fita_dxf = os.path.join(path_output_zip, f'{output_fita_lyr_name}.dxf')
+        '''output_fita_dxf = os.path.join(path_output_zip, f'{output_fita_lyr_name}.dxf')
         output_line_dxf = os.path.join(path_output_zip, f'{output_line_lyr_name}.dxf')
         self.fita_temp_gdf.geometry.to_file(output_fita_dxf, driver='DXF')
-        self.line_tram_temp_gdf.geometry.to_file(output_line_dxf, driver='DXF')
+        self.line_tram_temp_gdf.geometry.to_file(output_line_dxf, driver='DXF')'''
 
         # Create zip
         shutil.make_archive(path_output_zip, 'zip', path_output_zip)
@@ -358,10 +358,11 @@ class MunicatDataGenerator(View):
         """
         Copy the needed PDF file into the main directory.
         """
-        line_dir = path.join(LINES_DIR, self.line_id)
+        line_id_num = str(int(self.line_id))
+        line_dir = path.join(LINES_DIR, line_id_num)
         path_pdf_ed50 = path.join(line_dir, PDF_ED50)
         path_pdf_etrs89 = path.join(line_dir, PDF_ETRS89)
-        path_pdf_output = path.join(self.path_output_folder, f'{self.line_id}.pdf')
+        path_pdf_output = path.join(self.path_output_folder, f'{line_id_num}.pdf')
         # Search the path where exists de PDF file
         path_pdf = ''
         pdf_start_filename = f"MTT_{self.line_id}_{self.mtt_date}_{self.mtt_num}_"
