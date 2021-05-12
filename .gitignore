@@ -1,4 +1,4 @@
-# DelimitAPI db
+# delimitapp db
 db/
 # Reports
 reports/
@@ -7,7 +7,7 @@ qa_line/config.py
 doc_generator/config.py
 municat_generator/config.py
 run-config.txt
-DelimitAPI/settings.py
+delimitapp/settings.py
 # .env
 .env
 # Pycharm .idea

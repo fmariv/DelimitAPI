@@ -1,4 +1,4 @@
-"""DelimitAPI URL Configuration
+"""delimitapp URL Configuration
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/3.1/topics/http/urls/
@@ -15,10 +15,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import re_path, include
-import DelimitAPI.views
+import delimitapp.views
 
 urlpatterns = [
-    re_path(r'^$', DelimitAPI.views.index, name='index'),
+    re_path(r'^$', delimitapp.views.index, name='index'),
     re_path(r'^admin/', admin.site.urls),
     re_path(r'^qa-line/', include('qa_line.urls')),
     re_path(r'^municat/', include('municat_generator.urls')),

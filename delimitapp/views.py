@@ -3,5 +3,5 @@ from django.shortcuts import render, redirect
 
 
 def index(request):
-    return render(request, '../../DelimitAPI/templates/index.html')
+    return render(request, '../../delimitapp/templates/index.html')
 

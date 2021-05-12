@@ -13,7 +13,7 @@ click=7.1.2=pyh9f0ad1d_0
 click-plugins=1.1.1=py_0
 cligj=0.7.0=py_0
 curl=7.71.1=h4b64cdc_8
-django=3.1.2=py_1
+django=3.1.8=py_1
 djangorestframework=3.12.1=py_0
 expat=2.2.9=h33f27b4_2
 fiona=1.8.17=py37h6e57952_1

@@ -3,8 +3,7 @@
 # ----------------------------------------------------------
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Cesc Masdeu & Fran Martin
-# Version: 1.1
-# Date: 20210415
+# Version: 1.0
 # Version Python: 3.7
 # ----------------------------------------------------------
 
@@ -29,7 +28,7 @@ from django.contrib import messages
 
 # Local imports
 from qa_line.config import *
-from DelimitAPI.common.utils import line_id_2_txt
+from delimitapp.common.utils import line_id_2_txt
 
 
 class CheckQualityLine(View):
@@ -291,7 +290,6 @@ class CheckQualityLine(View):
 
     def copy_data_2_gpkg(self):
         """Copy all the feature classes and tables from the line's folder to the local work geopackage"""
-
         for shape in SHAPES_LIST:
             shape_name = shape.split('.')[0]
             shape_path = os.path.join(self.carto_folder, shape)

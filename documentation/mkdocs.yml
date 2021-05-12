@@ -1,4 +1,4 @@
-site_name: DelimitAPI
+site_name: DelimitApp
 nav:
     - Pàgina principal: index.md
     - CQ Línia: qa_line.md
@@ -7,9 +7,9 @@ nav:
     - Per desenvolupadors: code.md
 theme:
     name: gitbook
-repo_url: https://github.com/fmariv/DelimitAPI
-repo_name: DelimitAPI
-site_description: Documentació de l'aplicació DelimitAPI desenvolupada per la Unitat de Delimitació Territorial de l'Institut Cartogràfic i Geològic de Catalunya, amb l'objectiu d'integrar un seguit d'eines que permeten automatitzar fluxos de treball.
+repo_url: https://github.com/fmariv/delimitapp
+repo_name: delimitapp
+site_description: Documentació de l'aplicació DelimitApp desenvolupada per la Unitat de Delimitació Territorial de l'Institut Cartogràfic i Geològic de Catalunya, amb l'objectiu d'integrar un seguit d'eines que permeten automatitzar fluxos de treball.
 site_author: Francisco.Martin@icgc.cat
 plugins: []
 dev_addr: '127.0.0.1:8888'

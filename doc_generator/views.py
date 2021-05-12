@@ -4,7 +4,6 @@
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Fran Martin
 # Version: 1.0
-# Date: 20210315
 # Version Python: 3.7
 # ----------------------------------------------------------
 
@@ -25,7 +24,7 @@ from dotenv import load_dotenv
 
 # Local imports
 from doc_generator.config import *
-from DelimitAPI.common.utils import line_id_2_txt
+from delimitapp.common.utils import line_id_2_txt
 
 # Load dotenv in order to protect secret information
 load_dotenv()
@@ -205,6 +204,7 @@ def generate_letters_doc(request):
                 seu_od = f"de l'ajuntament{muni_2_prep}"
 
         try:
+            muni_2_prep, data_od, hora_od, seu_od, output_path, file_type = ('',) * 6
             if expedient == 'del':
                 doc = MailMerge(TEMPLATE_DEL)
                 output_path = AUTO_CARTA_OUTPUT_DOC_D
@@ -259,6 +259,7 @@ def generate_letters_pdf(request):
     pythoncom.CoInitialize()
 
     expedient = request.GET.get('expedient')
+    output_doc, output_pdf = '', ''
     if expedient == 'del':
         output_doc = AUTO_CARTA_OUTPUT_DOC_D
         output_pdf = AUTO_CARTA_OUTPUT_PDF_D

@@ -4,7 +4,6 @@
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Cesc Masdeu & Fran Martin
 # Version: 1.0
-# Date: 20210315
 # Version Python: 3.7
 # ----------------------------------------------------------
 
@@ -30,7 +29,7 @@ from django.contrib import messages
 
 # Local imports
 from municat_generator.config import *
-from DelimitAPI.common.utils import line_id_2_txt
+from delimitapp.common.utils import line_id_2_txt
 
 
 class MunicatDataGenerator(View):
@@ -343,10 +342,10 @@ class MunicatDataGenerator(View):
         self.line_tram_temp_gdf.to_file(output_line_shp)
 
         # Export data as dxf files
-        '''output_fita_dxf = os.path.join(path_output_zip, f'{output_fita_lyr_name}.dxf')
+        output_fita_dxf = os.path.join(path_output_zip, f'{output_fita_lyr_name}.dxf')
         output_line_dxf = os.path.join(path_output_zip, f'{output_line_lyr_name}.dxf')
         self.fita_temp_gdf.geometry.to_file(output_fita_dxf, driver='DXF')
-        self.line_tram_temp_gdf.geometry.to_file(output_line_dxf, driver='DXF')'''
+        self.line_tram_temp_gdf.geometry.to_file(output_line_dxf, driver='DXF')
 
         # Create zip
         shutil.make_archive(path_output_zip, 'zip', path_output_zip)
