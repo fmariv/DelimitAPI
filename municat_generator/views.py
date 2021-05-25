@@ -38,7 +38,7 @@ class MunicatDataGenerator(View):
     package with them
     """
     # Workspace parameters
-    current_date = datetime.now().strftime("%Y%m%d-%H%M")
+    current_date = None
     logger = logging.getLogger()
     # MTT parameters
     line_id = None
@@ -153,10 +153,13 @@ class MunicatDataGenerator(View):
         """
         Set up the environment parameters that the class would need
         """
+        self.current_date = datetime.now().strftime("%Y%m%d-%H%M")
         # Configure logger
         self.set_logging_config()
         # Write first log message
         self.write_first_report()
+        # Restart response data
+        self.response_data = {}
 
     def set_logging_config(self):
         """
