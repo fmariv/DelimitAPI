@@ -43,7 +43,7 @@ class CheckQualityLine(View):
     log_path = None
     ppf_list = None
     fites_list = None
-    founded_points_dict = None
+    found_points_dict = None
     # Paths to directories and folders
     line_folder = None
     doc_delim = None
@@ -80,7 +80,7 @@ class CheckQualityLine(View):
         # Check that the upload line directory exists
         line_dir_exists = self.check_line_dir_exists(line_id)
         if not line_dir_exists:
-            messages.error(request, f"No existeix la carpeta de la linia {self.line_id} al directori de càrrega.")
+            messages.error(request, f"No existeix la carpeta de la linia {line_id} al directori de càrrega.")
             return redirect("qa-page")
         self.set_up(line_id)
         # Check and set directories paths
@@ -119,8 +119,8 @@ class CheckQualityLine(View):
         self.ppf_list = self.get_ppf_list()
         # Create list with only points that are "Fita"
         self.fites_list = self.get_fites_list()
-        # Create dict with the only points that are founded and PPF
-        self.founded_points_dict = self.get_founded_points_dict()
+        # Create dict with the only points that are found and PPF
+        self.found_points_dict = self.get_found_points_dict()
         # Get a dict with the points ID and their coordinates
         self.points_coords_dict = self.get_round_point_coordinates()
         # Get a list with the line coordinates
@@ -147,8 +147,8 @@ class CheckQualityLine(View):
         self.check_points_decimals()
         # Get info and check the features in P_Proposta
         self.info_p_proposta()
-        # Check some aspects about founded points
-        if self.founded_points_dict:   # Check if exists any founded point
+        # Check some aspects about found points
+        if self.found_points_dict:   # Check if exists any found point
             self.check_found_points()
         # Check that the 3T points are indicated correctly
         self.check_3termes()
@@ -419,25 +419,25 @@ class CheckQualityLine(View):
 
         return fites
 
-    def get_founded_points_dict(self):
+    def get_found_points_dict(self):
         """
-        Get a dict of the founded PPF points with etiqueta as key and ID_PUNT as value
-        :return: points_founded_dict - Dict of the founded points with the key, value -> ID_FITA, ID_Punt
+        Get a dict of the found PPF points with etiqueta as key and ID_PUNT as value
+        :return: points_found_dict - Dict of the found points with the key, value -> ID_FITA, ID_Punt
         """
-        points_founded_dict = {}
-        founded = self.punt_fit_df['TROBADA'] == '1'
-        points_founded = self.punt_fit_df[founded]
-        if not points_founded.empty:
-            for index, feature in points_founded.iterrows():
+        points_found_dict = {}
+        found = self.punt_fit_df['TROBADA'] == '1'
+        points_found = self.punt_fit_df[found]
+        if not points_found.empty:
+            for index, feature in points_found.iterrows():
                 if feature['ID_PUNT'] in self.ppf_list:
                     if feature['AUX'] == '1':
                         point_num = f"{feature['ID_FITA']}-aux"
                     else:
                         point_num = feature['ID_FITA']
                     point_id = feature['ID_PUNT']
-                    points_founded_dict[point_num] = point_id
+                    points_found_dict[point_num] = point_id
 
-            return points_founded_dict
+            return points_found_dict
 
         else:
             return False
@@ -535,7 +535,7 @@ class CheckQualityLine(View):
         for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
             tram_id = feature['ID']
             tram_vertexs = len(feature['geometry'].coords)   # Nº of vertexs that compose the tram
-            self.logger.info(f"      Tram ID : {tram_id}  |  Nº vèrtex : {tram_vertexs}")
+            self.logger.info(f"      Tram ID : {tram_id}    |     Nº vèrtex : {tram_vertexs}")
 
     def check_points_decimals(self):
         """Check if the points's decimals are correct and are rounded to 1 decimal"""
@@ -557,7 +557,7 @@ class CheckQualityLine(View):
                 dif_y = abs(point_y - round(point_y, 1))
                 if dif_x > 0.01 or dif_y > 0.01:
                     decim_valid = False
-                    self.logger.error(f"La fita {point_num}  |  ID_PUNT : {point_id} no està correctament decimetritzada")
+                    self.logger.error(f"La fita {point_num}     |   ID_PUNT : {point_id} no està correctament decimetritzada")
 
         if decim_valid:
             self.logger.info('Les fites estan correctament decimetritzades')
@@ -612,7 +612,7 @@ class CheckQualityLine(View):
             valid = False
             for index, feature in points_ordpf_null.iterrows():
                 point_id = feature['ID_PUNT'].split('-')[-1]
-                self.logger.error(f"      El camp ORDPF del punt {point_id} a la taula PUNT_FIT és nul.")
+                self.logger.error(f"      El camp ORDPF del punt {point_id} a la taula P_PROPOSTA és nul.")
 
         return valid
 
@@ -635,36 +635,36 @@ class CheckQualityLine(View):
 
     def check_found_points(self):
         """
-        Check diferent things about the founded points, like:
+        Check diferent things about the found points, like:
             - Has photography
             - The photography exists in its folder
-            - If the point has Z coordinate must be founded point
+            - If the point has Z coordinate must be found point
         """
         # Check that the point has a photography indicated
         self.check_photo_exists()
         # Check that the photography exists in the photo's folder
         self.check_photo_name()
-        # Check that if the point has Z coordinate is a founded point
+        # Check that if the point has Z coordinate is a found point
         self.check_cota_fita()
 
     def check_photo_exists(self):
-        """Check that a founded point has a photography"""
+        """Check that a found point has a photography"""
         # Get a list of points with photography
         photo_exists = self.punt_line_gdf['FOTOS'].notnull()
         points_with_photo = self.punt_line_gdf[photo_exists]
         points_with_photo_list = points_with_photo['ID_PUNT'].to_list()
         # Only points that are PPF
         ppf_with_photo_list = [point_id for point_id in points_with_photo_list if point_id in self.ppf_list]
-        # Get a dict with the founded points without photography
-        founded_points_no_photo = {etiqueta: id_punt for (etiqueta, id_punt) in self.founded_points_dict.items() if id_punt not in ppf_with_photo_list}
+        # Get a dict with the found points without photography
+        found_points_no_photo = {etiqueta: id_punt for (etiqueta, id_punt) in self.found_points_dict.items() if id_punt not in ppf_with_photo_list}
 
-        if not founded_points_no_photo:
+        if not found_points_no_photo:
             self.logger.info('Totes les fites trobades tenen fotografia.')
         else:
-            for etiqueta, point_id in founded_points_no_photo.items():
+            for etiqueta, point_id in found_points_no_photo.items():
                 etiqueta = etiqueta.split('-')[-1]
                 point_id = point_id.split('-')[-1]
-                self.logger.error(f'      La fita {etiqueta}  |  ID PUNT : {point_id} és trobada però no té cap fotografia indicada.')
+                self.logger.error(f'      La fita {etiqueta}    |   ID PUNT : {point_id} és trobada però no té cap fotografia indicada.')
 
     def check_photo_name(self):
         """Check that the photography in the layer has the same name as de .JPG file"""
@@ -674,10 +674,10 @@ class CheckQualityLine(View):
         # Get a list with the photographies's filename from PPF
         photo_exists = self.punt_line_gdf['FOTOS'].notnull()
         points_with_photo = self.punt_line_gdf[photo_exists]
-        founded_points_photos = [feature['FOTOS'] for index, feature in points_with_photo.iterrows() if feature['ID_PUNT'] in self.ppf_list]
+        found_points_photos = [feature['FOTOS'] for index, feature in points_with_photo.iterrows() if feature['ID_PUNT'] in self.ppf_list]
         # Check that the photography in the point layer has the same filename as the photography into the folder
         photos_valid = True
-        for photo_filename in founded_points_photos:
+        for photo_filename in found_points_photos:
             if photo_filename not in folder_photos_filenames:
                 photos_valid = False
                 self.logger.error(f'La fotografia {photo_filename} no està a la carpeta de Fotografies.')
@@ -686,7 +686,7 @@ class CheckQualityLine(View):
             self.logger.info('Totes les fotografies informades a la capa Punt estan a la carpeta de Fotografies.')
 
     def check_cota_fita(self):
-        """Check that a point with Z coordinate is founded"""
+        """Check that a point with Z coordinate is found"""
         # Get a list with the PPF that have Z coordinate
         ppf_z_dict = {}
         for index, feature in self.punt_line_gdf.iterrows():
@@ -695,14 +695,19 @@ class CheckQualityLine(View):
             z_coord = feature['geometry'].z
             if z_coord > 0 and point_id in self.ppf_list:
                 ppf_z_dict[etiqueta] = point_id
+            elif z_coord == 0 and point_id in self.found_points_dict.values():
+                etiqueta = etiqueta.split('-')[-1]
+                point_id = point_id.split('-')[-1]
+                # TODO check if the point has an auxiliary point with z coordinate
+                self.logger.error(f'La F {etiqueta}     |   ID PUNT : {point_id} és trobada però no té coordenada Z.')
 
         z_coord_valid = True
         for etiqueta, point_id in ppf_z_dict.items():
-            if point_id not in self.founded_points_dict.values():
+            if point_id not in self.found_points_dict.values():
                 z_coord_valid = False
                 etiqueta = etiqueta.split('-')[-1]
                 point_id = point_id.split('-')[-1]
-                self.logger.error(f'La F {etiqueta}  |  ID PUNT : {point_id} té coordenada Z però no és fita trobada.')
+                self.logger.error(f'La F {etiqueta}     |   ID PUNT : {point_id} té coordenada Z però no és fita trobada.')
 
         if z_coord_valid:
             self.logger.info('Totes les fites amb coordenada Z són trobades')
@@ -881,28 +886,31 @@ class CheckQualityLine(View):
                     n_fita = point['ID_FITA'].values[0]
                     point_id = point_id.split('-')[-1]
                     if aux == '1':
-                        self.logger.info(f'      La fita F {n_fita} | ID PUNT {point_id} no està a sobre de la linia però és auxiliar.')
+                        self.logger.info(f'      La fita F {n_fita}     |   ID PUNT {point_id} no està a sobre de la linia però és auxiliar.')
                     else:
-                        self.logger.error(f'      La fita F {n_fita} | ID PUNT {point_id} no està a sobre de la linia i NO és auxiliar.')
+                        self.logger.error(f'      La fita F {n_fita}    |   ID PUNT {point_id} no està a sobre de la linia i NO és auxiliar.')
 
     def get_round_line_coordinates(self):
         """
-        Get a list with the line's coordinates and rount them to 1 decimal
+        Get a list with the line's coordinates and round them to 1 decimal
         :return: line_coords_list - List with the line's coordinates
         """
         line_coords_no_rounded = []
         trams = self.lin_tram_ppta_line_gdf['geometry'].tolist()
         for t in trams:
-            tram_coords = t.coords
-            for v in tram_coords:
-                line_coords_no_rounded.append(v)
+            if t is None:
+                self.logger.error(f"Existeix algun tram sense coordenades. Si us plau, elimina'l.")
+            else:
+                tram_coords = t.coords
+                for v in tram_coords:
+                    line_coords_no_rounded.append(v)
         line_coords_list = [(round(x, 1), round(y, 1)) for x, y in line_coords_no_rounded]
 
         return line_coords_list
 
     def write_first_report(self):
         """Write first log's report"""
-        init_log_report = f"ID Linia : {self.line_id_txt} |  Data i hora CQ : {self.current_date}"
+        init_log_report = f"ID Linia : {self.line_id_txt}   |   Data i hora CQ : {self.current_date}"
         self.logger.info(init_log_report)
 
     def rm_temp(self):

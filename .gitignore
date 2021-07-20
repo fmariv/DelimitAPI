@@ -14,3 +14,5 @@ delimitapp/settings.py
 .idea/
 # Requirements
 pip-requirements.txt
+# Python cache
+**/__pycache__
