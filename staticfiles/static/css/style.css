@@ -100,7 +100,7 @@ body {
     gap: 2%;
     padding-bottom: 2%;
 }
-.expedient-type {
+.expedient-type, .line-type {
     font-weight: bold;
     font-size: 15px;
     color: white;

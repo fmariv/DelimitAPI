@@ -14,6 +14,16 @@
 <div class="qa-line-container">
     <form class="form-inline" action="{% url 'qa-line' %}" method="GET" id="line_form">
       <input type="number" class="form-control mb-2 mr-sm-2" id="line_id" placeholder="ID línia" name="line_id" value="{{ line_id }}">
+      <div class="line-type-container">
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="line_type" id="inline-checkbox-1" value="mtt" checked>
+            <label class="form-check-label" for="inline-checkbox-1">MTT</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="line_type" id="inline-checkbox-2" value="rep">
+            <label class="form-check-label" for="inline-checkbox-2">Replantejament</label>
+          </div>
+      </div>
       <button type="submit" class="btn btn-primary mb-2">Check</button>
     </form>
 </div>
