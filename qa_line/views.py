@@ -30,6 +30,9 @@ from django.contrib import messages
 from qa_line.config import *
 from delimitapp.common.utils import line_id_2_txt
 
+# TODO: revisar aspectos relacionados con diccionarios y qué revisar
+# TODO: test
+
 
 class CheckQualityLine(View):
     """
@@ -51,7 +54,7 @@ class CheckQualityLine(View):
     carto_folder = None
     tables_folder = None
     photo_folder = None
-    # Geodataframes for data managing
+    # Geodataframes and layers for data managing
     tram_line_mem_gdf = None
     fita_mem_gdf = None
     tram_line_rep_gdf = None
@@ -59,6 +62,9 @@ class CheckQualityLine(View):
     lin_tram_ppta_line_gdf = None
     lin_tram_line_gdf = None
     punt_line_gdf = None
+    tram_line_layer = None
+    db_line_layer = None
+    db_point_layer = None
     p_proposta_df = None
     punt_fit_df = None
     # Coordinates data structures
@@ -127,9 +133,9 @@ class CheckQualityLine(View):
             # Create list with only points that are "Proposta Final"
             self.ppf_list = self.get_ppf_list()
             # Create dict with the only points that are found and PPF
-            self.found_points_dict = self.get_found_points_dict()
+            self.found_points_dict = self.get_found_points_dict()   # TODO: hacer un diccionario solo de fites trobades para rep?
             # Get a dict with the points ID and their coordinates
-            self.points_coords_dict = self.get_round_point_coordinates()
+            self.points_coords_dict = self.get_round_point_coordinates()   # TODO: lista separada de puntos sin decimetrizar?
             # Get a list with the line coordinates
             self.line_coords_list = self.get_round_line_coordinates()
 
@@ -137,30 +143,32 @@ class CheckQualityLine(View):
         # Check if the line ID already exists into the database
         self.check_line_id_exists()
         # Check if the line's field structure and content is correct
-        lin_tram_ppta_ok = self.check_lin_tram_ppta_layer()
+        lin_tram_ppta_ok = self.check_tram_line_layer()
         if not lin_tram_ppta_ok:
-            msg = "L'estructura de camps de Lin_TramPpta.shp no és correcte i no es pot continuar el procés, donat que hi ha algun" \
-                  " camp que falta o sobra a la capa. Si us plau, revisa-la."
+            msg = "L'estructura de camps de la capa de trams de línia no és correcte i no es pot continuar el procés," \
+                  " donat que hi ha algun camp que falta o sobra a la capa. Si us plau, revisa-la."
             response = self.create_error_response(msg)
             return render(request, '../templates/qa_reports.html', response)
         # Check the line and point's geometry
         self.check_layers_geometry()
         # Check that all the points indicated in the line layer exists in the tables and have filled correctly
         # all the attributes
-        self.check_lin_tram_ppta_points()
-        # Get info from the parts and vertexs of every line tram
+        if self.line_type == 'mtt': self.check_lin_tram_ppta_points()
+        # Get info from the parts and vertex of every line tram
         self.info_vertexs_line()
-        # Check that the points are correctly rounded
-        self.check_points_decimals()
-        # Get info and check the features in P_Proposta
-        self.info_p_proposta()
-        # Check some aspects about found points
-        if self.found_points_dict:   # Check if exists any found point
-            self.check_found_points()
+        if self.line_type == 'mtt':
+            # Check that the points are correctly rounded
+            self.check_points_decimals()
+            # Get info and check the features in P_Proposta
+            self.info_p_proposta()
+            # Check some aspects about found points
+            # TODO cuidado con este aspecto en fites de replantejament
+            if self.found_points_dict:   # Check if exists any found point
+                self.check_found_points()
         # Check that the 3T points are indicated correctly
         self.check_3termes()
         # Check the relation between the tables and the point layer
-        self.check_relation_points_tables()
+        if self.line_type == 'mtt': self.check_relation_points_tables()
         # Check the topology in order to avoid topological errors
         self.check_topology()
         
@@ -199,7 +207,8 @@ class CheckQualityLine(View):
         # Log filename and path
         self.current_date = datetime.now().strftime("%Y%m%d-%H%M")
         log_name = f"QA-Report_{self.line_id_txt}_{self.current_date}.txt"
-        self.log_path = path.join(LINES_DIR, self.line_id, WORK_REC_DIR, log_name)
+        log_dir = WORK_REC_DIR if self.line_type == 'mtt' else WORK_REP_DIR
+        self.log_path = path.join(LINES_DIR, self.line_id, log_dir, log_name)
         if path.exists(self.log_path):   # If a log with the same filename exists, removes it
             os.remove(self.log_path)
         file_handler = logging.FileHandler(filename=self.log_path, mode='w')
@@ -272,6 +281,19 @@ class CheckQualityLine(View):
         self.p_proposta_df = gpd.read_file(WORK_GPKG, layer='P_Proposta')
         self.punt_fit_df = gpd.read_file(WORK_GPKG, layer='PUNT_FIT')
 
+        # Set common line type layer. Depending on the function logic it has to take the official line layer or
+        # the non official line layer. In order to don't repeat the layer variable declaration, it is declared here
+        if self.line_type == 'mtt':
+            # Line layer
+            self.tram_line_layer = self.lin_tram_ppta_line_gdf
+            # Database layers
+            self.db_line_layer = self.tram_line_mem_gdf
+            self.db_point_layer = self.fita_mem_gdf
+        elif self.line_type == 'rep':
+            self.db_line_layer = self.tram_line_rep_gdf
+            self.db_point_layer = self.fita_rep_gdf
+            self.tram_line_layer = self.lin_tram_line_gdf
+
     def check_entities_exist(self):
         """
         Check if all the necessary shapefiles and tables exists
@@ -332,25 +354,16 @@ class CheckQualityLine(View):
     def check_line_id_exists(self):
         """Check if the line ID already exists into the database, both into fita_mem and lin_tram_mem"""
         line_id_in_lin_tram, line_id_in_fita_g = False, False
-        tram_line_layer, point_line_layer = None, None
-
-        # Get the correct DB layer depending on the line type
-        if self.line_type == 'mtt':
-            tram_line_layer = self.tram_line_mem_gdf
-            point_line_layer = self.fita_mem_gdf
-        elif self.line_type == 'rep':
-            tram_line_layer = self.tram_line_rep_gdf
-            point_line_layer = self.fita_rep_gdf
 
         # Check in lin_tram layer
-        tram_duplicated_id = tram_line_layer['id_linia'] == int(self.line_id)
-        tram_line_id = tram_line_layer[tram_duplicated_id]
+        tram_duplicated_id = self.tram_line_layer['id_linia'] == int(self.line_id)
+        tram_line_id = self.tram_line_layer[tram_duplicated_id]
         if not tram_line_id.empty:
             line_id_in_lin_tram = True
 
         # Check in fita layer
-        fita_duplicated_id = point_line_layer['id_linia'] == int(self.line_id)
-        fita_line_id = point_line_layer[fita_duplicated_id]
+        fita_duplicated_id = self.point_line_layer['id_linia'] == int(self.line_id)
+        fita_line_id = self.point_line_layer[fita_duplicated_id]
         if not fita_line_id.empty:
             line_id_in_fita_g = True
 
@@ -363,26 +376,34 @@ class CheckQualityLine(View):
         elif not line_id_in_fita_g and not line_id_in_lin_tram:
             self.logger.info("L'ID Linia no està repetit a fita_mem i lin_tram_mem de SIDM3")
 
-    def check_lin_tram_ppta_layer(self):
+    def check_tram_line_layer(self):
         """Check line's layer's field structure and content"""
         # The line's layer's field structure is critic for the correct running of the QA process. If it's not correct,
         # the process must stop
-        fields_lin_tram_ppta_ok = self.check_fields_lin_tram_ppta()
-        if not fields_lin_tram_ppta_ok:
+        fields_lin_tram_ok = self.check_fields_tram_line_layer()
+        if not fields_lin_tram_ok:
             return False
-        self.check_fields_content_lint_tram_ppta()
+        if self.line_type == 'mtt':
+            self.check_fields_content_lint_tram_ppta()
 
         return True
 
-    def check_fields_lin_tram_ppta(self):
+    def check_fields_tram_line_layer(self):
         """Check line's layer's field structure is correct"""
-        # Fields that the line's layer must have
-        true_fields = ('ID_LINIA', 'ID', 'DATA', 'COMENTARI', 'P1', 'P2', 'P3', 'P4', 'PF',
-                       'ID_FITA1', 'ID_FITA2', 'geometry')
+        lin_tram_fields, true_fields = None, None
+        layer = ''
 
-        # Get line's layer's fields
-        lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
-        lin_tram_fields = list(lin_tram_ppta_line_gdf.columns)
+        if self.line_type == 'mtt':
+            # Fields that the line's layer must have
+            true_fields = ('ID_LINIA', 'ID', 'DATA', 'COMENTARI', 'P1', 'P2', 'P3', 'P4', 'PF',
+                           'ID_FITA1', 'ID_FITA2', 'geometry')
+            lin_tram_fields = list(self.lin_tram_ppta_line_gdf.columns)
+            layer = 'Lin_TramPpta'
+        elif self.line_type == 'rep':
+            true_fields = ('ID', 'ID_LINIA', 'ID_SECTOR', 'ID_TRAM', 'OBSERVACIO', 'CORR_DIF', 'ID_FITA1', 'ID_FITA2',
+                           'geometry')
+            lin_tram_fields = list(self.lin_tram_line_gdf.columns)
+            layer = 'Lin_Tram'
 
         # Compare
         field_match = 0
@@ -391,10 +412,10 @@ class CheckQualityLine(View):
                 field_match += 1
 
         if field_match == len(true_fields):
-            self.logger.info("L'estructura de camps de Lin_TramPpta és correcte")
+            self.logger.info(f"L'estructura de camps de {layer} és correcte")
             return True
         else:
-            self.logger.error("L'estructura de camps de Lin_TramPpta NO és correcte")
+            self.logger.error(f"L'estructura de camps de {layer} NO és correcte")
             return False
 
     def check_fields_content_lint_tram_ppta(self):
@@ -506,23 +527,26 @@ class CheckQualityLine(View):
 
     def check_lin_tram_geometry(self):
         """ Check the line's geometry """
+        # Set line type layer
+        layer = 'Lin_TramPpta' if self.line_type == 'mtt' else layer = 'Lin_Tram'
+
         # Check if there are empty features
-        is_empty = self.lin_tram_ppta_line_gdf.is_empty
-        empty_features = self.lin_tram_ppta_line_gdf[is_empty]
+        is_empty = self.tram_line_layer.is_empty
+        empty_features = self.tram_line_layer[is_empty]
         if not empty_features.empty:
             for index, feature in empty_features.iterrows():
                 tram_id = feature['ID']
                 self.logger.error(f'      El tram {tram_id} està buit')
         # Check if there is a ring
-        is_ring = self.lin_tram_ppta_line_gdf.is_empty
-        ring_features = self.lin_tram_ppta_line_gdf[is_ring]
+        is_ring = self.tram_line_layer.is_empty
+        ring_features = self.tram_line_layer[is_ring]
         if not ring_features.empty:
             for index, feature in ring_features.iterrows():
                 tram_id = feature['ID']
                 self.logger.error(f'      El tram {tram_id} té un anell interior')
         # Check if the line is multi-part and count the parts in that case
         not_multipart = True
-        for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
+        for index, feature in self.tram_line_layer.iterrows():
             geom_type = feature['geometry'].geom_type
             if geom_type == 'MultiLineString':
                 not_multipart = False
@@ -531,7 +555,7 @@ class CheckQualityLine(View):
                 self.logger.error(f'      El tram {tram_id} és multi-part i té {n_parts} parts')
 
         if empty_features.empty and ring_features.empty and not_multipart:
-            self.logger.info("      No s'ha detectat cap error de geometria a Lin_TramPpta")
+            self.logger.info(f"      No s'ha detectat cap error de geometria a {layer}")
 
     def check_points_geometry(self):
         """Check the points' geometry"""
@@ -556,7 +580,7 @@ class CheckQualityLine(View):
     def info_vertexs_line(self):
         """Get info and make a recount of the line's vertexs"""
         self.logger.info('Vèrtexs de la linia :')
-        for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
+        for index, feature in self.tram_line_layer.iterrows():
             tram_id = feature['ID']
             tram_vertexs = len(feature['geometry'].coords)   # Nº of vertexs that compose the tram
             self.logger.info(f"      Tram ID : {tram_id}    |     Nº vèrtex : {tram_vertexs}")
@@ -805,12 +829,14 @@ class CheckQualityLine(View):
         self.check_line_crosses_itself()
         # Check that the line doesn't intersect the db lines
         self.check_line_intersects_db()
-        # Check that hte line doesn't overlaps the db lines
+        # Check that the line doesn't overlaps the db lines
         self.check_line_overlaps_db()
-        # Check that the lines endpoints are equal to any point
-        self.check_endpoint_covered_point()
-        # Check that if a point is not over a line is because it's an auxiliary point
-        self.check_auxiliary_point()
+        # TODO: cuidado con este aspecto en linias de replantejament
+        if self.line_type == 'mtt':
+            # Check that the lines endpoints are equal to any point
+            self.check_endpoint_covered_point()
+            # Check that if a point is not over a line is because it's an auxiliary point
+            self.check_auxiliary_point()
 
     def check_line_crosses_itself(self):
         """
@@ -819,16 +845,16 @@ class CheckQualityLine(View):
         """
         valid = True
         # Check if some tram does self-intersect
-        tram_is_valid = self.lin_tram_ppta_line_gdf.is_valid
-        invalid_features = self.lin_tram_ppta_line_gdf[~tram_is_valid]
+        tram_is_valid = self.tram_line_layer.is_valid
+        invalid_features = self.tram_line_layer[~tram_is_valid]
         if not invalid_features.empty:
             valid = False
             for i, invalid_feature in invalid_features.iterrows():
                 tram_id = invalid_feature['ID']
                 self.logger.error(f"      El tram {tram_id} de la línia s'intersecta o toca a sí mateix.")
         # Check if some tram intersects another line's tram
-        for i, tram in self.lin_tram_ppta_line_gdf.iterrows():
-            line = self.lin_tram_ppta_line_gdf[self.lin_tram_ppta_line_gdf['geometry'] != tram['geometry']]
+        for i, tram in self.tram_line_layer.iterrows():
+            line = self.tram_line_layer[self.tram_line_layer['geometry'] != tram['geometry']]
             # Iterates over the other line's trams to check if the curren tram crosses the others
             for i_, tram_ in line.iterrows():
                 if tram['geometry'].crosses(tram_['geometry']):
@@ -840,7 +866,8 @@ class CheckQualityLine(View):
 
     def check_line_intersects_db(self):
         """Check that the line doesn't intersects or crosses the database lines"""
-        features_intersects_db = gpd.sjoin(self.lin_tram_ppta_line_gdf, self.tram_line_mem_gdf, op='contains')
+        db_line_layer = self.tram_line_mem_gdf if self.line_type == 'mtt' else db_line_layer = self.tram_line_rep_gdf
+        features_intersects_db = gpd.sjoin(self.tram_line_layer, db_line_layer, op='contains')
         if not features_intersects_db.empty:
             for index, feature in features_intersects_db.iterrows():
                 self.logger.error(f"      El tram {feature['ID']} de la línia talla algun tram de la base de dades.")
@@ -849,7 +876,8 @@ class CheckQualityLine(View):
 
     def check_line_overlaps_db(self):
         """Check that the line doesn't overlaps the database lines"""
-        features_overlaps_db = gpd.sjoin(self.lin_tram_ppta_line_gdf, self.tram_line_mem_gdf, op='contains')
+        db_line_layer = self.tram_line_mem_gdf if self.line_type == 'mtt' else db_line_layer = self.tram_line_rep_gdf
+        features_overlaps_db = gpd.sjoin(self.tram_line_layer, db_line_layer, op='contains')
         if not features_overlaps_db.empty:
             for index, feature in features_overlaps_db.iterrows():
                 self.logger.error(f"      El tram {feature['ID']} de la línia es sobreposa a algun tram de la base de dades.")
@@ -860,7 +888,7 @@ class CheckQualityLine(View):
         """Check that the coordinates of the lines endpoints are equal to any point"""
         # Check if the lines endpoints coordinates are equal to any point
         endpoint_covered = True
-        for index, feature in self.lin_tram_ppta_line_gdf.iterrows():
+        for index, feature in self.tram_line_layer.iterrows():
             tram_id = feature['ID']
             # Get and round endpoints coordinates
             first_endpoint_no_rounded = feature['geometry'].coords[0]
@@ -934,7 +962,8 @@ class CheckQualityLine(View):
 
     def write_first_report(self):
         """Write first log's report"""
-        init_log_report = f"ID Linia : {self.line_id_txt}   |   Data i hora CQ : {self.current_date}"
+        report_line_type = 'Memòria dels Treballs Topogràfics' if self.line_type == 'mtt' else 'Replantejament'
+        init_log_report = f"ID Linia : {self.line_id_txt}   |   Data i hora CQ : {self.current_date}   |   Tipus de línia : {report_line_type}"
         self.logger.info(init_log_report)
 
     def rm_temp(self):
