@@ -37,6 +37,7 @@ class CheckQualityLine(View):
     """
     # Workspace parameters
     line_id = None
+    line_type = None
     line_id_txt = None
     current_date = None
     logger = logging.getLogger()
@@ -53,7 +54,10 @@ class CheckQualityLine(View):
     # Geodataframes for data managing
     tram_line_mem_gdf = None
     fita_mem_gdf = None
+    tram_line_rep_gdf = None
+    fita_rep_gdf = None
     lin_tram_ppta_line_gdf = None
+    lin_tram_line_gdf = None
     punt_line_gdf = None
     p_proposta_df = None
     punt_fit_df = None
@@ -71,6 +75,7 @@ class CheckQualityLine(View):
         # SET UP THE WORKING ENVIRONMENT -------------------------
         # Set up parameters
         line_id = request.GET.get('line_id')
+        line_type = request.GET.get('line_type')
         if not line_id:
             messages.error(request, "No s'ha introduit cap ID Linia")
             return redirect("qa-page")
@@ -115,16 +120,18 @@ class CheckQualityLine(View):
             return render(request, '../templates/qa_reports.html', response)
         # Set the layers geodataframe
         self.set_layers_gdf()
-        # Create list with only points that are "Proposta Final"
-        self.ppf_list = self.get_ppf_list()
         # Create list with only points that are "Fita"
         self.fites_list = self.get_fites_list()
-        # Create dict with the only points that are found and PPF
-        self.found_points_dict = self.get_found_points_dict()
-        # Get a dict with the points ID and their coordinates
-        self.points_coords_dict = self.get_round_point_coordinates()
-        # Get a list with the line coordinates
-        self.line_coords_list = self.get_round_line_coordinates()
+        # Set some environment variables only if the line to check is official
+        if self.line_type == 'mtt':
+            # Create list with only points that are "Proposta Final"
+            self.ppf_list = self.get_ppf_list()
+            # Create dict with the only points that are found and PPF
+            self.found_points_dict = self.get_found_points_dict()
+            # Get a dict with the points ID and their coordinates
+            self.points_coords_dict = self.get_round_point_coordinates()
+            # Get a list with the line coordinates
+            self.line_coords_list = self.get_round_line_coordinates()
 
         # START CHECKING ------------------------------------------
         # Check if the line ID already exists into the database
@@ -246,12 +253,21 @@ class CheckQualityLine(View):
 
     def set_layers_gdf(self):
         """Open all the necessary layers as geodataframes with geopandas"""
-        # SIDM2
-        self.tram_line_mem_gdf = gpd.read_file(WORK_GPKG, layer='tram_linia_mem')
-        self.fita_mem_gdf = gpd.read_file(WORK_GPKG, layer='fita_mem')
-        # Line
-        self.lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
+        # Lines and points
+        if self.line_type == 'mtt':
+            # DB layers
+            self.tram_line_mem_gdf = gpd.read_file(WORK_GPKG, layer='tram_linia_mem')
+            self.fita_mem_gdf = gpd.read_file(WORK_GPKG, layer='fita_mem')
+            # Line layer
+            self.lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
+        elif self.line_type == 'rep':
+            # DB layers
+            self.tram_line_rep_gdf = gpd.read_file(WORK_GPKG, layer='tram_linia_rep')
+            self.fita_rep_gdf = gpd.read_file(WORK_GPKG, layer='fita_rep')
+            # Line layer
+            self.lin_tram_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_Tram')
         self.punt_line_gdf = gpd.read_file(WORK_GPKG, layer='Punt')
+
         # Tables
         self.p_proposta_df = gpd.read_file(WORK_GPKG, layer='P_Proposta')
         self.punt_fit_df = gpd.read_file(WORK_GPKG, layer='PUNT_FIT')
@@ -315,18 +331,26 @@ class CheckQualityLine(View):
 
     def check_line_id_exists(self):
         """Check if the line ID already exists into the database, both into fita_mem and lin_tram_mem"""
-        line_id_in_lin_tram = False
-        line_id_in_fita_g = False
+        line_id_in_lin_tram, line_id_in_fita_g = False, False
+        tram_line_layer, point_line_layer = None, None
 
-        # Check into lin_tram_mem
-        tram_duplicated_id = self.tram_line_mem_gdf['id_linia'] == int(self.line_id)
-        tram_line_id = self.tram_line_mem_gdf[tram_duplicated_id]
+        # Get the correct DB layer depending on the line type
+        if self.line_type == 'mtt':
+            tram_line_layer = self.tram_line_mem_gdf
+            point_line_layer = self.fita_mem_gdf
+        elif self.line_type == 'rep':
+            tram_line_layer = self.tram_line_rep_gdf
+            point_line_layer = self.fita_rep_gdf
+
+        # Check in lin_tram layer
+        tram_duplicated_id = tram_line_layer['id_linia'] == int(self.line_id)
+        tram_line_id = tram_line_layer[tram_duplicated_id]
         if not tram_line_id.empty:
             line_id_in_lin_tram = True
 
-        # Check into fita_mem
-        fita_duplicated_id = self.fita_mem_gdf['id_linia'] == int(self.line_id)
-        fita_line_id = self.fita_mem_gdf[fita_duplicated_id]
+        # Check in fita layer
+        fita_duplicated_id = point_line_layer['id_linia'] == int(self.line_id)
+        fita_line_id = point_line_layer[fita_duplicated_id]
         if not fita_line_id.empty:
             line_id_in_fita_g = True
 
