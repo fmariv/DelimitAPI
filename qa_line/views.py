@@ -82,6 +82,7 @@ class CheckQualityLine(View):
         # Set up parameters
         line_id = request.GET.get('line_id')
         line_type = request.GET.get('line_type')
+        # Check the line ID input
         if not line_id:
             messages.error(request, "No s'ha introduit cap ID Linia")
             return redirect("qa-page")
@@ -124,20 +125,18 @@ class CheckQualityLine(View):
             msg = "No s'han pogut copiar capes o taules. Veure log per més informació."
             response = self.create_error_response(msg)
             return render(request, '../templates/qa_reports.html', response)
-        # Set the layers geodataframe
+        # Set the layers geodataframes
         self.set_layers_gdf()
+        # Create list with only points that are "Proposta Final"
+        if self.line_type == 'mtt': self.ppf_list = self.get_ppf_list()
         # Create list with only points that are "Fita"
         self.fites_list = self.get_fites_list()
-        # Set some environment variables only if the line to check is official
-        if self.line_type == 'mtt':
-            # Create list with only points that are "Proposta Final"
-            self.ppf_list = self.get_ppf_list()
-            # Create dict with the only points that are found and PPF
-            self.found_points_dict = self.get_found_points_dict()   # TODO: hacer un diccionario solo de fites trobades para rep?
-            # Get a dict with the points ID and their coordinates
-            self.points_coords_dict = self.get_round_point_coordinates()   # TODO: lista separada de puntos sin decimetrizar?
-            # Get a list with the line coordinates
-            self.line_coords_list = self.get_round_line_coordinates()
+        # Create dict with the only points that are found, and PPF if the line is official
+        self.found_points_dict = self.get_found_points_dict()
+        # Get a dict with the points ID and their coordinates
+        self.points_coords_dict = self.get_point_coordinates()
+        # Get a list with the line coordinates
+        self.line_coords_list = self.get_line_coordinates()
 
         # START CHECKING ------------------------------------------
         # Check if the line ID already exists into the database
@@ -153,25 +152,25 @@ class CheckQualityLine(View):
         self.check_layers_geometry()
         # Check that all the points indicated in the line layer exists in the tables and have filled correctly
         # all the attributes
-        if self.line_type == 'mtt': self.check_lin_tram_ppta_points()
+        self.check_lin_tram_points()
         # Get info from the parts and vertex of every line tram
         self.info_vertexs_line()
+        # Check some aspects about found points, first of all checking if exists any found point
+        if self.found_points_dict: self.check_found_points()
+        # Check some aspects about the decimals and the PPF points, only if the line is official
         if self.line_type == 'mtt':
             # Check that the points are correctly rounded
             self.check_points_decimals()
             # Get info and check the features in P_Proposta
             self.info_p_proposta()
-            # Check some aspects about found points
-            # TODO cuidado con este aspecto en fites de replantejament
-            if self.found_points_dict:   # Check if exists any found point
-                self.check_found_points()
-        # Check that the 3T points are indicated correctly
+        # Check if the 3T points are indicated correctly
         self.check_3termes()
         # Check the relation between the tables and the point layer
-        if self.line_type == 'mtt': self.check_relation_points_tables()
+        self.check_relation_points_tables()
         # Check the topology in order to avoid topological errors
         self.check_topology()
-        
+
+        # SEND RESPONSE ------------------------------------------
         # Remove working directory
         self.rm_working_directory()
         # Send response as OK
@@ -466,7 +465,8 @@ class CheckQualityLine(View):
 
     def get_found_points_dict(self):
         """
-        Get a dict of the found PPF points with etiqueta as key and ID_PUNT as value
+        Get a dict of the found points with etiqueta as key and ID_PUNT as value. If the line is official, the dict
+        only contains the PPF found points. If not, it returns all the found points.
         :return: points_found_dict - Dict of the found points with the key, value -> ID_FITA, ID_Punt
         """
         points_found_dict = {}
@@ -474,7 +474,15 @@ class CheckQualityLine(View):
         points_found = self.punt_fit_df[found]
         if not points_found.empty:
             for index, feature in points_found.iterrows():
-                if feature['ID_PUNT'] in self.ppf_list:
+                if self.line_type == 'mtt':
+                    if feature['ID_PUNT'] in self.ppf_list:
+                        if feature['AUX'] == '1':
+                            point_num = f"{feature['ID_FITA']}-aux"
+                        else:
+                            point_num = feature['ID_FITA']
+                        point_id = feature['ID_PUNT']
+                        points_found_dict[point_num] = point_id
+                elif self.line_type == 'rep':
                     if feature['AUX'] == '1':
                         point_num = f"{feature['ID_FITA']}-aux"
                     else:
@@ -495,30 +503,31 @@ class CheckQualityLine(View):
         self.logger.info('Punt :')
         self.check_points_geometry()
 
-    def check_lin_tram_ppta_points(self):
+    def check_lin_tram_points(self):
         """
         Check that the points indicated into the line layer as initial and final point exist in the
         tables and have all them attributes correctly filled
         :return: boolean - Indicates whether the points exist in the tables or not
         """
-        lin_tram_ppta_point_1 = self.lin_tram_ppta_line_gdf['ID_FITA1'].to_list()
-        lin_tram_ppta_point_2 = self.lin_tram_ppta_line_gdf['ID_FITA2'].to_list()
-        lin_tram_ppta_points = lin_tram_ppta_point_1 + lin_tram_ppta_point_2
-        lin_tram_ppta_points = list(set(lin_tram_ppta_points))
-        none_exists = any(x is None for x in lin_tram_ppta_points)
+        lin_tram_point_1 = self.tram_line_layer['ID_FITA1'].to_list()
+        lin_tram_point_2 = self.tram_line_layer['ID_FITA2'].to_list()
+        lin_tram_points = lin_tram_point_1 + lin_tram_point_2
+        lin_tram_points = list(set(lin_tram_points))
+        none_exists = any(x is None for x in lin_tram_points)
         if none_exists:
             self.logger.error("Atenció: hi ha trams on falta alguna fita per indicar. Revisar si és un error o no")
 
-        points_in_ppf = True
-        for point in lin_tram_ppta_points:
-            if point is not None:
-                if point not in self.ppf_list and points_in_ppf:
-                    point_id = point.split('-')[-1]
-                    self.logger.error(f"La fita {point_id} està indicada com a fita inicial o final d'un tram "
-                                      f"però no està indicada com a Punt Proposta Final")
+        if self.line_type == 'mtt':
+            points_in_ppf = True
+            for point in lin_tram_points:
+                if point is not None:
+                    if point not in self.ppf_list and points_in_ppf:
+                        point_id = point.split('-')[-1]
+                        self.logger.error(f"La fita {point_id} està indicada com a fita inicial o final d'un tram "
+                                          f"però no està indicada com a Punt Proposta Final")
 
         points_in_fites = True
-        for point_ in lin_tram_ppta_points:
+        for point_ in lin_tram_points:
             if point_ is not None:
                 if point_ not in self.fites_list and points_in_fites:
                     point_id_ = point_.split('-')[-1]
@@ -528,7 +537,7 @@ class CheckQualityLine(View):
     def check_lin_tram_geometry(self):
         """ Check the line's geometry """
         # Set line type layer
-        layer = 'Lin_TramPpta' if self.line_type == 'mtt' else layer = 'Lin_Tram'
+        layer = 'Lin_TramPpta' if self.line_type == 'mtt' else 'Lin_Tram'
 
         # Check if there are empty features
         is_empty = self.tram_line_layer.is_empty
@@ -701,10 +710,18 @@ class CheckQualityLine(View):
         photo_exists = self.punt_line_gdf['FOTOS'].notnull()
         points_with_photo = self.punt_line_gdf[photo_exists]
         points_with_photo_list = points_with_photo['ID_PUNT'].to_list()
-        # Only points that are PPF
-        ppf_with_photo_list = [point_id for point_id in points_with_photo_list if point_id in self.ppf_list]
+
+        points_with_photo_checklist = []
+        if self.line_type == 'mtt':
+            # Only points that are PPF from official lines
+            ppf_with_photo_list = [point_id for point_id in points_with_photo_list if point_id in self.ppf_list]
+            points_with_photo_checklist = ppf_with_photo_list
+        elif self.line_type == 'rep':
+            # All the points from unofficial lines
+            points_with_photo_checklist = points_with_photo_list
+
         # Get a dict with the found points without photography
-        found_points_no_photo = {etiqueta: id_punt for (etiqueta, id_punt) in self.found_points_dict.items() if id_punt not in ppf_with_photo_list}
+        found_points_no_photo = {etiqueta: id_punt for (etiqueta, id_punt) in self.found_points_dict.items() if id_punt not in points_with_photo_checklist}
 
         if not found_points_no_photo:
             self.logger.info('Totes les fites trobades tenen fotografia.')
@@ -719,10 +736,14 @@ class CheckQualityLine(View):
         # Get a list with the photographies's filename in the photography folder
         folder_photos_filenames = [f for f in os.listdir(self.photo_folder) if os.path.isfile(os.path.join(self.photo_folder, f)) and
                                    (f.endswith(".jpg") or f.endswith(".JPG"))]
-        # Get a list with the photographies's filename from PPF
+        # Get a list with the photographies's filename, from PPF if the line is official
         photo_exists = self.punt_line_gdf['FOTOS'].notnull()
         points_with_photo = self.punt_line_gdf[photo_exists]
-        found_points_photos = [feature['FOTOS'] for index, feature in points_with_photo.iterrows() if feature['ID_PUNT'] in self.ppf_list]
+        found_points_photos = []
+        if self.line_type == 'mtt':
+            found_points_photos = [feature['FOTOS'] for index, feature in points_with_photo.iterrows() if feature['ID_PUNT'] in self.ppf_list]
+        elif self.line_type == 'rep':
+            found_points_photos = [feature['FOTOS'] for index, feature in points_with_photo.iterrows()]
         # Check that the photography in the point layer has the same filename as the photography into the folder
         photos_valid = True
         for photo_filename in found_points_photos:
@@ -736,13 +757,13 @@ class CheckQualityLine(View):
     def check_cota_fita(self):
         """Check that a point with Z coordinate is found"""
         # Get a list with the PPF that have Z coordinate
-        ppf_z_dict = {}
+        points_z_dict = {}
         for index, feature in self.punt_line_gdf.iterrows():
             etiqueta = feature['ETIQUETA']
             point_id = feature['ID_PUNT']
             z_coord = feature['geometry'].z
-            if z_coord > 0 and point_id in self.ppf_list:
-                ppf_z_dict[etiqueta] = point_id
+            if z_coord > 0 and point_id in self.found_points_dict.values():
+                points_z_dict[etiqueta] = point_id
             elif z_coord == 0 and point_id in self.found_points_dict.values():
                 etiqueta = etiqueta.split('-')[-1]
                 point_id = point_id.split('-')[-1]
@@ -750,7 +771,7 @@ class CheckQualityLine(View):
                 self.logger.error(f'La F {etiqueta}     |   ID PUNT : {point_id} és trobada però no té coordenada Z.')
 
         z_coord_valid = True
-        for etiqueta, point_id in ppf_z_dict.items():
+        for etiqueta, point_id in points_z_dict.items():
             if point_id not in self.found_points_dict.values():
                 z_coord_valid = False
                 etiqueta = etiqueta.split('-')[-1]
@@ -800,16 +821,17 @@ class CheckQualityLine(View):
         self.logger.info('Comprovant correspondència entre les taules i la capa Punt...')
         points_id_list = self.punt_line_gdf['ID_PUNT'].tolist()
 
-        # Check that all the ID_PUNT from P_Proposta exist in the point layer
-        p_proposta_valid = True
-        for index, feature in self.p_proposta_df.iterrows():
-            point_id = feature['ID_PUNT']
-            if point_id not in points_id_list:
-                p_proposta_valid = False
-                point_id = point_id.split('-')[-1]
-                self.logger.error(f'El registre amb ID PUNT : {point_id} de la taula P_PROPOSTA no està a la capa Punt.')
-        if p_proposta_valid:
-            self.logger.info('      Correspondència OK entre els punts de P_PROPOSTA i Punt.')
+        if self.line_type == 'mtt':
+            # Check that all the ID_PUNT from P_Proposta exist in the point layer
+            p_proposta_valid = True
+            for index, feature in self.p_proposta_df.iterrows():
+                point_id = feature['ID_PUNT']
+                if point_id not in points_id_list:
+                    p_proposta_valid = False
+                    point_id = point_id.split('-')[-1]
+                    self.logger.error(f'El registre amb ID PUNT : {point_id} de la taula P_PROPOSTA no està a la capa Punt.')
+            if p_proposta_valid:
+                self.logger.info('      Correspondència OK entre els punts de P_PROPOSTA i Punt.')
 
         # Check that all the ID_PUNT from PUNT_FIT exist in the point layer
         punt_fit_valid = True
@@ -831,12 +853,12 @@ class CheckQualityLine(View):
         self.check_line_intersects_db()
         # Check that the line doesn't overlaps the db lines
         self.check_line_overlaps_db()
-        # TODO: cuidado con este aspecto en linias de replantejament
-        if self.line_type == 'mtt':
-            # Check that the lines endpoints are equal to any point
-            self.check_endpoint_covered_point()
-            # Check that if a point is not over a line is because it's an auxiliary point
-            self.check_auxiliary_point()
+        # Check that the lines endpoints are equal to any point
+        self.check_endpoint_covered_point()
+        # Check that if a point is not over a line is because it's an auxiliary point
+        # This check is not done for unofficial lines because almost the lines have a lot of control points that
+        # are not covered by the line.
+        if self.line_type == 'mtt': self.check_auxiliary_point()
 
     def check_line_crosses_itself(self):
         """
@@ -866,7 +888,7 @@ class CheckQualityLine(View):
 
     def check_line_intersects_db(self):
         """Check that the line doesn't intersects or crosses the database lines"""
-        db_line_layer = self.tram_line_mem_gdf if self.line_type == 'mtt' else db_line_layer = self.tram_line_rep_gdf
+        db_line_layer = self.tram_line_mem_gdf if self.line_type == 'mtt' else self.tram_line_rep_gdf
         features_intersects_db = gpd.sjoin(self.tram_line_layer, db_line_layer, op='contains')
         if not features_intersects_db.empty:
             for index, feature in features_intersects_db.iterrows():
@@ -876,7 +898,7 @@ class CheckQualityLine(View):
 
     def check_line_overlaps_db(self):
         """Check that the line doesn't overlaps the database lines"""
-        db_line_layer = self.tram_line_mem_gdf if self.line_type == 'mtt' else db_line_layer = self.tram_line_rep_gdf
+        db_line_layer = self.tram_line_mem_gdf if self.line_type == 'mtt' else self.tram_line_rep_gdf
         features_overlaps_db = gpd.sjoin(self.tram_line_layer, db_line_layer, op='contains')
         if not features_overlaps_db.empty:
             for index, feature in features_overlaps_db.iterrows():
@@ -890,11 +912,17 @@ class CheckQualityLine(View):
         endpoint_covered = True
         for index, feature in self.tram_line_layer.iterrows():
             tram_id = feature['ID']
-            # Get and round endpoints coordinates
+            # Get endpoints coordinates
             first_endpoint_no_rounded = feature['geometry'].coords[0]
-            first_endpoint = (round(first_endpoint_no_rounded[0], 1), round(first_endpoint_no_rounded[1], 1))
             last_endpoint_no_rounded = feature['geometry'].coords[-1]
-            last_endpoint = (round(last_endpoint_no_rounded[0], 1), round(last_endpoint_no_rounded[1], 1))
+            # Rount them if the line is official
+            first_endpoint, last_endpoint = None, None
+            if self.line_type == 'mtt':
+                first_endpoint = (round(first_endpoint_no_rounded[0], 1), round(first_endpoint_no_rounded[1], 1))
+                last_endpoint = (round(last_endpoint_no_rounded[0], 1), round(last_endpoint_no_rounded[1], 1))
+            elif self.line_type == 'rep':
+                first_endpoint = first_endpoint_no_rounded
+                last_endpoint = last_endpoint_no_rounded
 
             if (first_endpoint or last_endpoint) not in self.points_coords_dict.values():
                 endpoint_covered = False
@@ -903,18 +931,24 @@ class CheckQualityLine(View):
         if endpoint_covered:
             self.logger.info('      Tots els punts finals dels trams de la linia coincideixen amb una fita de la capa Punt.')
 
-    def get_round_point_coordinates(self):
+    def get_point_coordinates(self):
         """
-        Get a dict of the points ID and coordinates, and round them to 1 decimal
+        Get a dict of the points ID and coordinates, and round them to 1 decimal if the line is official
         :return: points_coord_dict - Dict of points coordinates with format (x, y)
         """
         # Get ID
         points_id = self.punt_line_gdf['ID_PUNT'].tolist()
         # Get coordinates
         x_coords_no_round_list = self.punt_line_gdf['geometry'].x.tolist()
-        x_coords_list = [round(x, 1) for x in x_coords_no_round_list]
         y_coords_no_round_list = self.punt_line_gdf['geometry'].y.tolist()
-        y_coords_list = [round(y, 1) for y in y_coords_no_round_list]
+        # Round the coordinates if the line is official
+        x_coords_list, y_coords_list = None, None
+        if self.line_type == 'mtt':
+            x_coords_list = [round(x, 1) for x in x_coords_no_round_list]
+            y_coords_list = [round(y, 1) for y in y_coords_no_round_list]
+        elif self.line_type == 'rep':
+            x_coords_list = x_coords_no_round_list
+            y_coords_list = y_coords_no_round_list
         # Get list with the points coordinates
         points_coord_list = list(zip(x_coords_list, y_coords_list))
         # Enrich list with the point id and convert to dict
@@ -942,9 +976,9 @@ class CheckQualityLine(View):
                     else:
                         self.logger.error(f'      La fita F {n_fita}    |   ID PUNT {point_id} no està a sobre de la linia i NO és auxiliar.')
 
-    def get_round_line_coordinates(self):
+    def get_line_coordinates(self):
         """
-        Get a list with the line's coordinates and round them to 1 decimal
+        Get a list with the line's coordinates, and round them to 1 decimal if the line is official
         :return: line_coords_list - List with the line's coordinates
         """
         line_coords_no_rounded = []
@@ -956,7 +990,12 @@ class CheckQualityLine(View):
                 tram_coords = t.coords
                 for v in tram_coords:
                     line_coords_no_rounded.append(v)
-        line_coords_list = [(round(x, 1), round(y, 1)) for x, y in line_coords_no_rounded]
+
+        line_coords_list = None
+        if self.line_type == 'mtt':
+            line_coords_list = [(round(x, 1), round(y, 1)) for x, y in line_coords_no_rounded]
+        elif self.line_type == 'rep':
+            line_coords_list = line_coords_no_rounded
 
         return line_coords_list
 
