@@ -3,7 +3,7 @@
 # ----------------------------------------------------------
 # TERRITORIAL DELIMITATION TOOLS (ICGC)
 # Authors: Cesc Masdeu & Fran Martin
-# Version: 1.0
+# Version: 1.1
 # Version Python: 3.7
 # ----------------------------------------------------------
 
