@@ -11,7 +11,6 @@
 Quality check of a line ready to upload to the database
 """
 
-# Standard library imports
 import os
 import os.path as path
 from datetime import datetime
@@ -19,18 +18,14 @@ import logging
 import re
 import shutil
 
-# Third party imports
 import geopandas as gpd
 from osgeo import gdal
 from django.views import View
 from django.shortcuts import render, redirect
 from django.contrib import messages
 
-# Local imports
 from qa_line.config import *
 from delimitapp.common.utils import line_id_2_txt
-
-# TODO: test
 
 
 class CheckQualityLine(View):
@@ -154,7 +149,7 @@ class CheckQualityLine(View):
         # all the attributes
         self.check_lin_tram_points()
         # Get info from the parts and vertex of every line tram
-        self.info_vertexs_line()
+        self.info_vertex_line()
         # Check some aspects about found points, first of all checking if exists any found point
         if self.found_points_dict: self.check_found_points()
         # Check some aspects about the decimals and the PPF points, only if the line is official
@@ -185,6 +180,8 @@ class CheckQualityLine(View):
         """
         Set up the environment parameters that the class would need
         :param line_id: line ID from the line the class is going to check
+        :param line_type: line type from the line the class is going to check. It can be 'mtt' or 'rep', and
+                          means whether the line is official or not
         """
         # Set line ID
         self.line_id = line_id
@@ -245,13 +242,13 @@ class CheckQualityLine(View):
             for sub_dir in SUB_DIR_LIST:  # Check if all the subdirs exist
                 if sub_dir not in os.listdir(self.doc_delim):
                     tree_valid = False
-                    self.logger.error(f'No existeix el subdirectori {sub_dir}')
+                    self.logger.error(f'No existeix el subdirectori {sub_dir}.')
         else:
-            self.logger.error('No existeix DocDelim dins el directori de la linia')
+            self.logger.error('No existeix DocDelim dins el directori de la linia.')
             tree_valid = False
 
         if tree_valid:
-            self.logger.info('Estructura de directoris OK')
+            self.logger.info('Estructura de directoris OK.')
             return tree_valid
 
     def set_directories(self):
@@ -316,13 +313,13 @@ class CheckQualityLine(View):
                 tables_exist = False
 
         if not shapes_exist and not tables_exist:
-            self.logger.error('Falten capes i taules necessàries a les carpetes de Cartografia i Taules')
+            self.logger.error('Falten capes i taules necessàries a les carpetes de Cartografia i Taules.')
             return False
         elif not shapes_exist and tables_exist:
-            self.logger.error('Falten capes necessàries a la carpeta de Cartografia')
+            self.logger.error('Falten capes necessàries a la carpeta de Cartografia.')
             return False
         elif shapes_exist and not tables_exist:
-            self.logger.error('Falten taules necessàries a la carpeta de Taules')
+            self.logger.error('Falten taules necessàries a la carpeta de Taules.')
             return False
         else:
             return True
@@ -347,10 +344,10 @@ class CheckQualityLine(View):
                 dbf_gdf = gpd.read_file(dbf_path)
                 dbf_gdf.to_file(WORK_GPKG, layer=dbf_name, driver="GPKG")
             except Exception as e:
-                self.logger.error(f"No s'ha pogut copiar la taula {dbf_name} => {e}")
+                self.logger.error(f"No s'ha pogut copiar la taula {dbf_name} => {e}.")
                 return False
 
-        self.logger.info(f"Capes i taules de la linia {self.line_id} copiades correctament a CQline.gpkg")
+        self.logger.info(f"Capes i taules de la linia {self.line_id} copiades correctament a CQline.gpkg.")
         return True
 
     def check_line_id_exists(self):
@@ -373,13 +370,13 @@ class CheckQualityLine(View):
             line_id_in_fita_g = True
 
         if line_id_in_fita_g and line_id_in_lin_tram:
-            self.logger.error(f"L'ID Linia introduït està en fita_{line_type} i tram_linia_{line_type}")
+            self.logger.error(f"L'ID Linia introduït està en fita_{line_type} i tram_linia_{line_type}.")
         elif line_id_in_fita_g and not line_id_in_lin_tram:
-            self.logger.error(f"L'ID Linia introduït està en fita_{line_type} però no en lin_tram_{line_type}")
+            self.logger.error(f"L'ID Linia introduït està en fita_{line_type} però no en lin_tram_{line_type}.")
         elif not line_id_in_fita_g and line_id_in_lin_tram:
-            self.logger.error(f"L'ID Linia introduït no està en fita_{line_type} però sí en lin_tram_{line_type}")
+            self.logger.error(f"L'ID Linia introduït no està en fita_{line_type} però sí en lin_tram_{line_type}.")
         elif not line_id_in_fita_g and not line_id_in_lin_tram:
-            self.logger.info(f"L'ID Linia no està repetit a fita_{line_type} ni a lin_tram_{line_type} de SIDM3")
+            self.logger.info(f"L'ID Linia no està repetit a fita_{line_type} ni a lin_tram_{line_type} de SIDM3.")
 
     def check_tram_line_layer(self):
         """Check line's layer's field structure and content"""
@@ -395,8 +392,7 @@ class CheckQualityLine(View):
 
     def check_fields_tram_line_layer(self):
         """Check line's layer's field structure is correct"""
-        lin_tram_fields, true_fields = None, None
-        layer = ''
+        lin_tram_fields, true_fields, layer = None, None, ''
 
         if self.line_type == 'mtt':
             # Fields that the line's layer must have
@@ -417,10 +413,10 @@ class CheckQualityLine(View):
                 field_match += 1
 
         if field_match == len(true_fields):
-            self.logger.info(f"L'estructura de camps de {layer} és correcte")
+            self.logger.info(f"L'estructura de camps de {layer} és correcte.")
             return True
         else:
-            self.logger.error(f"L'estructura de camps de {layer} NO és correcte")
+            self.logger.error(f"L'estructura de camps de {layer} NO és correcte.")
             return False
 
     def check_fields_content_lint_tram_ppta(self):
@@ -431,7 +427,7 @@ class CheckQualityLine(View):
         tram_not_line_id = self.lin_tram_ppta_line_gdf[not_line_id]
         if not tram_not_line_id.empty:
             line_id_error = True
-            self.logger.error("Existeixen trams de linia amb l'ID_LINIA d'una altra linia")
+            self.logger.error("Existeixen trams de linia amb l'ID_LINIA d'una altra linia.")
 
         # Check that the fita ID is correct
         id_fita_error = False
@@ -444,10 +440,10 @@ class CheckQualityLine(View):
 
         if not tram_id_f1_bad.empty or not tram_id_f2_bad.empty:
             id_fita_error = True
-            self.logger.error("El camp ID_FITA d'algun dels trams de la linia no és vàlid")
+            self.logger.error("El camp ID_FITA d'algun dels trams de la linia no és vàlid.")
 
         if not line_id_error and not id_fita_error:
-            self.logger.info("Els camps de Lin_TramPpta estan correctament emplenats")
+            self.logger.info("Els camps de Lin_TramPpta estan correctament emplenats.")
 
     def get_ppf_list(self):
         """
@@ -503,8 +499,9 @@ class CheckQualityLine(View):
 
     def check_layers_geometry(self):
         """ Check the geometry of both line and points """
+        line_layer = 'Lin_Tram_Proposta' if self.line_type == 'mtt' else 'Lin_Tram'
         self.logger.info('Comprovació de les geometries...')
-        self.logger.info('Lin_Tram_Proposta :')
+        self.logger.info(f'{line_layer} :')
         self.check_lin_tram_geometry()
         self.logger.info('Punt :')
         self.check_points_geometry()
@@ -521,7 +518,7 @@ class CheckQualityLine(View):
         lin_tram_points = list(set(lin_tram_points))
         none_exists = any(x is None for x in lin_tram_points)
         if none_exists:
-            self.logger.error("Atenció: hi ha trams on falta alguna fita per indicar. Revisa si és un error o no")
+            self.logger.error("Atenció: hi ha trams on falta alguna fita per indicar. Revisa si és un error o no.")
 
         if self.line_type == 'mtt':
             points_in_ppf = True
@@ -530,7 +527,7 @@ class CheckQualityLine(View):
                     if point not in self.ppf_list and points_in_ppf:
                         point_id = point.split('-')[-1]
                         self.logger.error(f"La fita amb ID PUNT : {point_id} està indicada com a fita inicial o final d'un tram "
-                                          f"però no està indicada com a Punt Proposta Final")
+                                          f"però no està indicada com a Punt Proposta Final.")
 
         points_in_fites = True
         for point_ in lin_tram_points:
@@ -538,7 +535,7 @@ class CheckQualityLine(View):
                 if point_ not in self.fites_list and points_in_fites:
                     point_id_ = point_.split('-')[-1]
                     self.logger.error(f"La fita amb ID PUNT : {point_id_} està indicada com a fita inicial o final d'un tram "
-                                      f"però no està indicada com a fita")
+                                      f"però no està indicada com a fita.")
 
     def check_lin_tram_geometry(self):
         """ Check the line's geometry """
@@ -570,7 +567,7 @@ class CheckQualityLine(View):
                 self.logger.error(f'      El tram {tram_id} és multi-part i té {n_parts} parts')
 
         if empty_features.empty and ring_features.empty and not_multipart:
-            self.logger.info(f"      No s'ha detectat cap error de geometria a {layer}")
+            self.logger.info(f"      No s'ha detectat cap error de geometria a {layer}.")
 
     def check_points_geometry(self):
         """Check the points' geometry"""
@@ -590,9 +587,9 @@ class CheckQualityLine(View):
                 self.logger.error(f'      El punt {point_id} no té una geometria vàlida')
 
         if empty_features.empty and invalid_features.empty:
-            self.logger.info("      No s'ha detectat cap error de geometria a la capa Punt")
+            self.logger.info("      No s'ha detectat cap error de geometria a la capa Punt.")
 
-    def info_vertexs_line(self):
+    def info_vertex_line(self):
         """Get info and make a recount of the line's vertexs"""
         self.logger.info('Vèrtexs de la linia :')
         for index, feature in self.tram_line_layer.iterrows():
@@ -620,10 +617,10 @@ class CheckQualityLine(View):
                 dif_y = abs(point_y - round(point_y, 1))
                 if dif_x > 0.01 or dif_y > 0.01:
                     decim_valid = False
-                    self.logger.error(f"La fita {point_num}     |   ID_PUNT : {point_id} no està correctament decimetritzada")
+                    self.logger.error(f"La fita {point_num}     |   ID_PUNT : {point_id} no està correctament decimetritzada.")
 
         if decim_valid:
-            self.logger.info('Les fites estan correctament decimetritzades')
+            self.logger.info('Les fites estan correctament decimetritzades.')
 
     def info_p_proposta(self):
         """
@@ -692,7 +689,7 @@ class CheckQualityLine(View):
             for index, feature in bad_auxiliary_points.iterrows():
                 point_id = feature['ID_PUNT'].split('-')[-1]
                 self.logger.error(f"      El punt amb ID PUNT : {point_id} està mal indicat a P_Proposta: sembla que es tracta "
-                                  f"d'una fita auxiliar indicada com a fita real")
+                                  f"d'una fita auxiliar indicada com a fita real.")
 
         return valid
 
@@ -785,7 +782,7 @@ class CheckQualityLine(View):
                 self.logger.error(f'La F {etiqueta}     |   ID PUNT : {point_id} té coordenada Z però no és fita trobada.')
 
         if z_coord_valid:
-            self.logger.info('Totes les fites amb coordenada Z són trobades')
+            self.logger.info('Totes les fites amb coordenada Z són trobades.')
 
     def check_3termes(self):
         """Check 3 terms points"""
@@ -808,7 +805,7 @@ class CheckQualityLine(View):
             ppf_point = sorted_points_df['ID_PUNT'].isin(self.ppf_list)
             sorted_points_df = sorted_points_df[ppf_point]
             if sorted_points_df.empty:
-                self.logger.error("No hi ha punts indicats com Proposta")
+                self.logger.error("No hi ha punts indicats com Proposta.")
                 return
         # Get a list with the contact field from both first and last point
         first_point = sorted_points_df.iloc[0]
