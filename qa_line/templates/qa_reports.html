@@ -5,7 +5,7 @@
         <p class="error-message"> {{ response.message }} </p>
     {% elif response.result == "OK" %}
         {% for report in response.reports %}
-            {% if report.level == "ERROR " %}
+            {% if report.level == "ERROR" %}
                 <p class="error-message"> {{ report.report_message }} </p>
             {% else %}
                 <p class="message"> {{ report.report_message }} </p>
