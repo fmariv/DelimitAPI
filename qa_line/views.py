@@ -410,16 +410,16 @@ class CheckQualityLine(View):
             lin_tram_fields = list(self.lin_tram_line_gdf.columns)
             layer = 'Lin Tram'
 
-        # Sort the lists to avoid errors
-        sorted_true_fields = sorted(true_fields)
-        sorted_lin_tram_fields = sorted(lin_tram_fields)
-
         # Compare
-        if sorted_lin_tram_fields == sorted_true_fields:
-            self.logger.info(f"   L'estructura de camps de {layer} és correcte")
+        field_match = 0
+        for field in lin_tram_fields:
+            if field in true_fields:
+                field_match += 1
+        if field_match == len(true_fields):
+            self.logger.info(f"   L'estructura de camps de {layer} es correcte")
             return True
         else:
-            self.logger.critical(f"   L'estructura de camps de {layer} NO és correcte")
+            self.logger.critical(f"   L'estructura de camps de {layer} NO es correcte")
             return False
 
     def check_fields_content_lint_tram_ppta(self):
@@ -521,7 +521,7 @@ class CheckQualityLine(View):
         lin_tram_points = list(set(lin_tram_points))
         none_exists = any(x is None for x in lin_tram_points)
         if none_exists:
-            self.logger.error("   Atenció: hi ha trams on falta alguna fita per indicar. Revisa si és un error o no")
+            self.logger.error("   Atencio: hi ha trams on falta alguna fita per indicar. Revisa si es un error o no es un tram que arriva al mar")
 
         if self.line_type == 'mtt':
             points_in_ppf = True
@@ -597,6 +597,7 @@ class CheckQualityLine(View):
     def info_vertex_line(self):
         """Get info and make a recount of the line's vertexs"""
         self.logger.info('Obtenint relacio de vertex per tram de linia...')
+        # TODO sort by tram ID
         for index, feature in self.tram_line_layer.iterrows():
             tram_id = feature['ID']
             tram_vertexs = len(feature['geometry'].coords)  # Nº of vertexs that compose the tram
@@ -806,6 +807,8 @@ class CheckQualityLine(View):
         etiquetes = sorted_points_df_temp['ETIQUETA'].tolist()
         etiquetes_int = []
         for i in etiquetes:
+            if i is None:
+                i = ''
             point_num = re.search(r'\d+', i)
             if point_num:
                 point_num = int(point_num.group())
