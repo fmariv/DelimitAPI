@@ -40,6 +40,7 @@ class MunicatDataGenerator(View):
     # Workspace parameters
     current_date = None
     logger = logging.getLogger()
+    log_path = None
     # MTT parameters
     line_id = None
     session_id = None
@@ -79,6 +80,8 @@ class MunicatDataGenerator(View):
         with open(MTT) as f:
             f_reader = csv.reader(f, delimiter=",")
             for row in f_reader:
+                # #######################
+                # LOAD CONFIGURATION
                 # Read input data
                 line_id = str(row[0])
                 session_id = str(row[1])
@@ -86,35 +89,47 @@ class MunicatDataGenerator(View):
                 mtt_num = str(row[3])
                 # Set those input data as class variables
                 self.set_municat_data(line_id, session_id, mtt_date, mtt_num)
+                # Log those class variables
+                self.log_municat_data()
                 # Get the names of the municipies
                 self.get_muni_names()
 
-                # Start extraction and data management
+                # #######################
+                # SET UP THE WORKING ENVIRONMENT
+                self.logger.info("Preparant entorn de treball...")
                 try:
                     self.rm_temp()  # Delete previous temp files if exist
                 except Exception as e:
-                    msg = f'Error esborrant arxius temporals per la línia {line_id} => {e}'
+                    msg = f'   Error esborrant arxius temporals per la linia {line_id} => {e}'
                     self.add_warning_response(msg, line_id)
                     break
                 # Check if the session_id exists in the database
                 session_id_exists = self.check_session_id()
                 if not session_id_exists:
-                    msg = f"L'ID sessió introduït per la línia {line_id} no existeix a la base de dades"
+                    msg = f"   L'ID sessio introduit per la linia {line_id} no existeix a la base de dades"
                     self.add_warning_response(msg, line_id)
                     break
+
+                # #######################
+                # DATA EXTRACTION
                 # Extract points and lines and export them as shapefiles
                 try:
                     self.extract_data()
+                    self.logger.info('   Geometries extretes correctament')
                 except Exception as e:
-                    msg = f'Error extraient les geometries de la línia {line_id} de la base de dades => {e}'
+                    msg = f'   Error extraient les geometries de la linia {line_id} de la base de dades => {e}'
                     self.add_warning_response(msg, line_id)
                     break
                 # Check if exists other line ID's in the data extracted
+                self.logger.info('Validant i editant les dades...')
                 line_id_ok = self.check_line_id()
                 if not line_id_ok:
-                    msg = f'Hi ha un o més ID Linia a les dades que no corresponen a la linia {self.line_id}'
+                    msg = f'   Hi ha un o més ID de linia a les dades que no corresponen a la linia {self.line_id}'
                     self.add_warning_response(msg, line_id)
                     break
+
+                # #######################
+                # DATA MANAGEMENT
                 # Delete auxiliary points from the point gdf
                 self.delete_aux()
                 # Delete and manage columns to the gdf
@@ -125,13 +140,15 @@ class MunicatDataGenerator(View):
                 self.add_munis_names()
                 # Check whether the points' geometry is valid
                 self.check_points_geometry()
+                self.logger.info('   Dades validades i editades correctament')
 
+                # #######################
+                # DATA EXPORT
                 # Export the data as ESRI shapefiles and DXF files
                 self.export_data()
                 # Copy PDF to the output folder
                 self.copy_pdf()
-
-                self.logger.info(f'Carpeta municat de la línia {line_id} generada correctament')
+                self.logger.info(f'Carpeta municat de la linia {line_id} generada correctament\n')
 
         # Send response. The message's type depends on the success of the process. In that sense, if exists
         # any line ID in a warning-line JSON array it indicates that for some reason, the app could not be able
@@ -139,10 +156,10 @@ class MunicatDataGenerator(View):
         if 'warning-lines' in self.response_data:
             self.response_data['result'] = 'warning'
             if len(self.response_data['warning-lines']) > 1:
-                messages.warning(request, f"No s'han generat les carpetes per les línies {self.response_data['warning-lines']}")
+                messages.warning(request, f"No s'han generat les carpetes per les linies {self.response_data['warning-lines']}")
             else:
                 line_id_warning = self.response_data['warning-lines'][0]
-                messages.warning(request, f"No s'ha pogut generar la carpeta per la línia {line_id_warning}")
+                messages.warning(request, f"No s'ha pogut generar la carpeta per la linia {line_id_warning}")
         else:
             self.response_data['result'] = 'OK'
             self.response_data['message'] = f'Carpetes generades correctament'
@@ -168,13 +185,21 @@ class MunicatDataGenerator(View):
         # Logging level
         self.logger.setLevel(logging.INFO)
         # Message format
-        log_format = logging.Formatter("%(levelname)s - %(message)s")
+        log_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         # Log filename and path
-        log_name = f"Municat_{self.current_date}.txt"
-        log_path = os.path.join(LOG_DIR, log_name)
-        file_handler = logging.FileHandler(filename=log_path, mode='w')
+        log_name = f"Municat_log-{self.current_date}.txt"
+        self.log_path = os.path.join(LOG_DIR, log_name)
+        file_handler = logging.FileHandler(filename=self.log_path, mode='a')
         file_handler.setFormatter(log_format)
         self.logger.addHandler(file_handler)
+
+    def write_first_report(self):
+        """Write first log's report"""
+        date = datetime.now().strftime("%Y%m%d-%H:%M:%S")
+        with open(self.log_path, "a") as f:
+            f.write("\tProces:  Generacio de carpetes pel Municat\n")
+            f.write(f"\tData:   {date}\n")
+            f.write("\n")
 
     def set_layers_gdf(self):
         """Open all the necessary layers as geodataframes with geopandas"""
@@ -184,10 +209,6 @@ class MunicatDataGenerator(View):
         # Table id_linia_muni
         self.line_id_muni_gdf = gpd.read_file(WORK_GPKG, layer='id_linia_muni')
 
-    def write_first_report(self):
-        """Write first log's report"""
-        init_log_report = f"Proces d'extraccio de dades pel Municat - {self.current_date}"
-        self.logger.info(init_log_report)
 
     def set_municat_data(self, line_id, session_id, mtt_date, mtt_num):
         """
@@ -197,6 +218,14 @@ class MunicatDataGenerator(View):
         self.session_id = session_id
         self.mtt_date = mtt_date
         self.mtt_num = mtt_num
+
+    def log_municat_data(self):
+        """ Log's the data from the input csv file """
+        self.logger.info("Carregant configuracio...")
+        self.logger.info(f"   ID linia:  {self.line_id}")
+        self.logger.info(f"   ID sessio: {self.session_id}")
+        self.logger.info(f"   Data MTT:  {self.mtt_date}")
+        self.logger.info(f"   Nº MTT:    {self.mtt_num}")
 
     def get_muni_names(self):
         """
@@ -212,13 +241,16 @@ class MunicatDataGenerator(View):
         Check if the given session ID exists in the database, both in line and points layers
         :return: boolean that indicates if the given session ID exists in the database
         """
+        self.logger.info("Comprovant que l'ID sessio introduit existeix a la base de dades...")
         if (self.session_id in self.line_tram_mem_gdf.id_sessio_carrega.values) and (self.session_id in self.fita_mem_gdf.id_sessio_carrega.values):
+            self.logger.info('   Existeix')
             return True
         else:
             return False
 
     def extract_data(self):
         """Extract, manage and export the data"""
+        self.logger.info('Extraient geometries de la base de dades...')
         for layer in self.fita_mem_gdf, self.line_tram_mem_gdf:
             geom_type = ''
             session_line_id_gdf = layer[(layer['id_sessio_carrega'] == self.session_id) & (layer['id_linia'] == float(self.line_id))]
@@ -319,6 +351,7 @@ class MunicatDataGenerator(View):
         """
         Export the data extracted into a single directory. The geometries are exported into a zip file.
         """
+        self.logger.info('Exportant les dades com Shapefiles i DXF...')
         # Folders paths
         int_line_id = str(int(self.line_id))   # The folder's name must be the line ID without zeros
         self.path_output_folder = os.path.join(FOLDERS, int_line_id)
@@ -356,10 +389,13 @@ class MunicatDataGenerator(View):
         # Delete working folder
         shutil.rmtree(path_output_zip)
 
+        self.logger.info('   Dades exportades i zip generat')
+
     def copy_pdf(self):
         """
         Copy the needed PDF file into the main directory.
         """
+        self.logger.info('Exportant el document PDF...')
         line_id_num = str(int(self.line_id))
         line_dir = path.join(LINES_DIR, line_id_num)
         path_pdf_ed50 = path.join(line_dir, PDF_ED50)
@@ -390,6 +426,7 @@ class MunicatDataGenerator(View):
 
         # Copy the PDF file into the output folder
         shutil.copyfile(path_pdf, path_pdf_output)
+        self.logger.info("   Document PDF exportat")
 
     def add_warning_response(self, message, line_id):
         """
@@ -410,4 +447,4 @@ class MunicatDataGenerator(View):
         gpkg = gdal.OpenEx(WORK_GPKG, gdal.OF_UPDATE, allowed_drivers=['GPKG'])
         for layer in TEMP_ENTITIES:
             gpkg.ExecuteSQL(f'DROP TABLE {layer}')
-        self.logger.info('Arxius temporals esborrats')
+        self.logger.info('   Arxius temporals esborrats')

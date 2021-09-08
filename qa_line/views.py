@@ -72,7 +72,8 @@ class CheckQualityLine(View):
         Main entry point. Here is where the magic is done. This method is called when someone wants to init the process of quality
         checking and is supposed to prepare the workspace, prepare the line and check it's geometry and attributes
         """
-        # SET UP THE WORKING ENVIRONMENT -------------------------
+        # #######################
+        # SET UP THE WORKING ENVIRONMENT
         # Set up parameters
         line_id = request.GET.get('line_id')
         line_type = request.GET.get('line_type')
@@ -134,7 +135,8 @@ class CheckQualityLine(View):
         # Get a list with the line coordinates
         self.line_coords_list = self.get_line_coordinates()
 
-        # START CHECKING ------------------------------------------
+        # #######################
+        # DATA CHECKING
         # Check if the line ID already exists into the database
         self.check_line_id_exists()
         # Check if the line's field structure and content is correct
@@ -166,7 +168,8 @@ class CheckQualityLine(View):
         # Check the topology in order to avoid topological errors
         self.check_topology()
 
-        # SEND RESPONSE ------------------------------------------
+        # #######################
+        # RESPONSE SEND
         # Remove working directory
         self.rm_working_directory()
         # Send response as OK
