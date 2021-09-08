@@ -65,13 +65,15 @@ class MunicatDataGenerator(View):
         Main entry point. This method is called when someone wants to init the process of extracting and managing
         data from the database in order to create a package zip file that will be send to local governments.
         """
-        # SET UP THE WORKING ENVIRONMENT -------------------------
+        # #######################
+        # SET UP WORKING ENVIRONMENT
         # Set up parameters
         self.set_up()
         # Set the layers geodataframe
         self.set_layers_gdf()
 
-        # START THE PROCESS --------------------------------------
+        #######################
+        # EXTRACTION PROCESS START
         # Check that the input data file exists
         if not path.exists(MTT):
             messages.error(request, "No s'ha trobat l'arxiu amb l'informació d'entrada")
@@ -95,7 +97,7 @@ class MunicatDataGenerator(View):
                 self.get_muni_names()
 
                 # #######################
-                # SET UP THE WORKING ENVIRONMENT
+                # VALIDATE WORKING ENVIRONMENT
                 self.logger.info("Preparant entorn de treball...")
                 try:
                     self.rm_temp()  # Delete previous temp files if exist
@@ -208,7 +210,6 @@ class MunicatDataGenerator(View):
         self.fita_mem_gdf = gpd.read_file(WORK_GPKG, layer='fita_mem')
         # Table id_linia_muni
         self.line_id_muni_gdf = gpd.read_file(WORK_GPKG, layer='id_linia_muni')
-
 
     def set_municat_data(self, line_id, session_id, mtt_date, mtt_num):
         """
