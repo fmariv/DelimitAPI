@@ -1,5 +1,6 @@
 # delimitapp db
 db/
+db.sqlite3
 # Reports
 reports/
 ## CONFIG files
@@ -8,6 +9,7 @@ doc_generator/config.py
 municat_generator/config.py
 run-config.txt
 delimitapp/settings.py
+deploy.py
 # .env
 .env
 # Pycharm .idea

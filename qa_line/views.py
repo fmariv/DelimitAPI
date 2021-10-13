@@ -19,6 +19,7 @@ import re
 import shutil
 
 import geopandas as gpd
+import fiona
 from osgeo import gdal
 from django.views import View
 from django.shortcuts import render, redirect
@@ -271,16 +272,18 @@ class CheckQualityLine(View):
             self.fita_mem_gdf = gpd.read_file(WORK_GPKG, layer='fita_mem')
             # Line layer
             self.lin_tram_ppta_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_TramPpta')
+            # Tables
+            self.p_proposta_df = gpd.read_file(WORK_GPKG, layer='P_Proposta')
         elif self.line_type == 'rep':
             # DB layers
             self.tram_line_rep_gdf = gpd.read_file(WORK_GPKG, layer='tram_linia_rep')
             self.fita_rep_gdf = gpd.read_file(WORK_GPKG, layer='fita_rep')
             # Line layer
             self.lin_tram_line_gdf = gpd.read_file(WORK_GPKG, layer='Lin_Tram')
+            # Tables
+            if 'P_Proposta' in fiona.listlayers(WORK_GPKG):   # P_Proposta table can be empty if the line type is a replantejament
+                self.p_proposta_df = gpd.read_file(WORK_GPKG, layer='P_Proposta')
         self.punt_line_gdf = gpd.read_file(WORK_GPKG, layer='Punt')
-
-        # Tables
-        self.p_proposta_df = gpd.read_file(WORK_GPKG, layer='P_Proposta')
         self.punt_fit_df = gpd.read_file(WORK_GPKG, layer='PUNT_FIT')
 
         # Set common line type layer. Depending on the function logic it has to take the official line layer or
@@ -346,7 +349,11 @@ class CheckQualityLine(View):
             dbf_path = os.path.join(self.tables_folder, dbf)
             try:
                 dbf_gdf = gpd.read_file(dbf_path)
-                dbf_gdf.to_file(WORK_GPKG, layer=dbf_name, driver="GPKG")
+                if self.line_type == 'rep' and dbf_name == 'P_Proposta':   # P_Proposta table can be empty if the line type is a replantejament
+                    if not dbf_gdf.empty:
+                        dbf_gdf.to_file(WORK_GPKG, layer=dbf_name, driver="GPKG")
+                else:
+                    dbf_gdf.to_file(WORK_GPKG, layer=dbf_name, driver="GPKG")
             except Exception as e:
                 self.logger.error(f"   No s'ha pogut copiar la taula {dbf_name} => {e}")
                 return False
@@ -806,6 +813,7 @@ class CheckQualityLine(View):
         sorted_points_df_temp = self.punt_line_gdf
         etiquetes = sorted_points_df_temp['ETIQUETA'].tolist()
         etiquetes_int = []
+        # TODO solo ordenar las fitas que tengan 'F' en su etiqueta, o sea, que sean fitas reales
         for i in etiquetes:
             if i is None:
                 i = ''
@@ -933,7 +941,7 @@ class CheckQualityLine(View):
         # Check if the lines endpoints coordinates are equal to any point
         endpoint_covered = True
         for index, feature in self.tram_line_layer.iterrows():
-            tram_id = feature['ID']
+            tram_id = feature['ID_TRAM']
             # Get endpoints coordinates
             first_endpoint_no_rounded = feature['geometry'].coords[0]
             last_endpoint_no_rounded = feature['geometry'].coords[-1]
