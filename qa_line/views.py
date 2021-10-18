@@ -941,7 +941,7 @@ class CheckQualityLine(View):
         # Check if the lines endpoints coordinates are equal to any point
         endpoint_covered = True
         for index, feature in self.tram_line_layer.iterrows():
-            tram_id = feature['ID_TRAM']
+            tram_id = feature['ID'] if self.line_type == 'mtt' else feature['ID_TRAM']
             # Get endpoints coordinates
             first_endpoint_no_rounded = feature['geometry'].coords[0]
             last_endpoint_no_rounded = feature['geometry'].coords[-1]
