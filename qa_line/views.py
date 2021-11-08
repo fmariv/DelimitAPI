@@ -911,8 +911,9 @@ class CheckQualityLine(View):
             for i_, tram_ in line.iterrows():
                 if tram['geometry'].crosses(tram_['geometry']):
                     valid = False
-                    self.logger.error(f'   El tram {tram["ID"]} de la linia talla el '
-                                      f'tram {tram_["ID"]} de la mateixa linia')
+                    tram_id = tram["ID"] if self.line_type == 'mtt' else tram["ID_TRAM"]
+                    self.logger.error(f'   El tram {tram_id} de la linia talla el '
+                                      f'tram {tram_id} de la mateixa linia')
         if valid:
             self.logger.info("   Els trams de la linia no s'intersecten o toquen a si mateixos")
 
