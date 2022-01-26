@@ -1,6 +1,6 @@
 from django.urls import re_path
 from doc_generator.views import MunicatDataExtractor, render_doc_generator_page, render_letter_generator_page,\
-    generate_letters_doc, generate_letters_pdf, remove_letters
+    generate_letters_doc, remove_letters
 
 '''
 Class-based views
@@ -13,6 +13,5 @@ urlpatterns = [
     re_path(r'^letters/$', render_letter_generator_page, name='letter-generator-page'),
     re_path(r'^letters/extract-municat/$', MunicatDataExtractor.as_view(), name='municat-data-extraction'),
     re_path(r'^letters/generate-doc/$', generate_letters_doc, name='doc-letter-generation'),
-    re_path(r'^letters/generate-pdf/$', generate_letters_pdf, name='pdf-letter-generation'),
     re_path(r'^letters/remove-letters/$', remove_letters, name='letter-removing')
 ]

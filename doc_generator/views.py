@@ -17,8 +17,6 @@ from django.views import View
 from django.shortcuts import render, redirect
 from django.contrib import messages
 import pandas as pd
-import comtypes.client
-import pythoncom
 from mailmerge import MailMerge
 from dotenv import load_dotenv
 
@@ -28,6 +26,8 @@ from delimitapp.common.utils import line_id_2_txt
 
 # Load dotenv in order to protect secret information
 load_dotenv()
+
+# TODO transformd word files into pdf files
 
 
 class MunicatDataExtractor(View):
@@ -247,44 +247,6 @@ def generate_letters_doc(request):
             messages.error(request, f'Error generant les cartes en format docx: {e}')
             return redirect("letter-generator-page")
     messages.success(request, 'Cartes generades correctament en format docx')
-    return redirect("letter-generator-page")
-
-
-def generate_letters_pdf(request):
-    """
-    Convert all the docx files into pdf files
-    :param request: Http request
-    :return: redirect to the letter generator page
-    """
-    pythoncom.CoInitialize()
-
-    expedient = request.GET.get('expedient')
-    output_doc, output_pdf = '', ''
-    if expedient == 'del':
-        output_doc = AUTO_CARTA_OUTPUT_DOC_D
-        output_pdf = AUTO_CARTA_OUTPUT_PDF_D
-    elif expedient == 'rel':
-        output_doc = AUTO_CARTA_OUTPUT_DOC_R
-        output_pdf = AUTO_CARTA_OUTPUT_PDF_R
-
-    for f in os.listdir(output_doc):
-        # Font -> https://stackoverflow.com/questions/6011115/doc-to-pdf-using-python
-        in_file = os.path.join(output_doc, f)
-        out_file = os.path.join(output_pdf, f.replace("docx", "pdf"))
-
-        wdFormatPDF = 17
-
-        try:
-            word = comtypes.client.CreateObject('Word.Application')
-            doc = word.Documents.Open(in_file)
-            doc.SaveAs(out_file, FileFormat=wdFormatPDF)
-            doc.Close()
-            word.Quit()
-        except Exception as e:
-            messages.error(request, f'Error generant les cartes en format pdf: {e}')
-            return redirect("letter-generator-page")
-
-    messages.success(request, 'Cartes generades correctament en format pdf')
     return redirect("letter-generator-page")
 
 

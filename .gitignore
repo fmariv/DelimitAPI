@@ -1,7 +1,3 @@
-# delimitapp db
-db/
-# Reports
-reports/
 ## CONFIG files
 qa_line/config.py
 doc_generator/config.py
@@ -12,7 +8,5 @@ delimitapp/settings.py
 .env
 # Pycharm .idea
 .idea/
-# Requirements
-pip-requirements.txt
 # Py cache
 **/__pycache__
