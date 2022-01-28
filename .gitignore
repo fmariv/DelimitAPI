@@ -1,3 +1,6 @@
+# delimitapp db
+db/
+db.sqlite3
 ## CONFIG files
 qa_line/config.py
 doc_generator/config.py
@@ -10,9 +13,3 @@ delimitapp/settings.py
 .idea/
 # Py cache
 **/__pycache__
-# Doc
-TODO.md
-# Geopackage DB
-db/*
-# SQLite
-db.sqlite3
