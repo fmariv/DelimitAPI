@@ -1,6 +1,5 @@
 # delimitapp db
 db/
-db.sqlite3
 # Reports
 reports/
 ## CONFIG files
@@ -14,7 +13,5 @@ deploy.py
 .env
 # Pycharm .idea
 .idea/
-# Requirements
-pip-requirements.txt
 # Py cache
 **/__pycache__
